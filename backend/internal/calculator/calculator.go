@@ -1,0 +1,36 @@
+// Package calculator implements the calculator's arithmetic. It knows nothing
+// about HTTP or JSON, and every operation returns either a finite result or one
+// of the errors defined here.
+package calculator
+
+import (
+	"errors"
+	"math"
+)
+
+var (
+	// ErrUndefinedResult means the operation has no real-number answer.
+	ErrUndefinedResult = errors.New("the result is not a real number")
+	// ErrResultOutOfRange means the answer is too large to represent.
+	ErrResultOutOfRange = errors.New("the result is too large to represent")
+)
+
+// Add returns a + b.
+func Add(a, b float64) (float64, error) {
+	return checked(a + b)
+}
+
+// checked rejects non-finite results and normalises -0 to 0. Every operation
+// returns through it, so callers never receive a value JSON can't represent.
+func checked(result float64) (float64, error) {
+	switch {
+	case math.IsNaN(result):
+		return 0, ErrUndefinedResult
+	case math.IsInf(result, 0):
+		return 0, ErrResultOutOfRange
+	case result == 0:
+		return 0, nil
+	default:
+		return result, nil
+	}
+}
