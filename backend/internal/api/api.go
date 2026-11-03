@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"fullstack-calculator/backend/internal/calculator"
 )
@@ -39,57 +40,53 @@ func NewHandler() http.Handler {
 // binary adapts a two-operand calculation into an HTTP handler.
 func binary(calculate func(a, b float64) (float64, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			A *float64 `json:"a"`
-			B *float64 `json:"b"`
-		}
-		if !decode(w, r, &request) {
+		operands, ok := decodeOperands(w, r, "a", "b")
+		if !ok {
 			return
 		}
-		if request.A == nil || request.B == nil {
-			writeError(w, http.StatusBadRequest, codeInvalidRequest, `the fields "a" and "b" are required`)
-			return
-		}
-		result, err := calculate(*request.A, *request.B)
+		result, err := calculate(operands["a"], operands["b"])
 		respond(w, result, err)
 	}
 }
 
-// decode reads the request body into dst, writing an error response and
-// returning false if the body isn't a single valid JSON value of dst's shape.
-// Unset fields stay nil, which lets handlers tell a missing value from zero.
-func decode(w http.ResponseWriter, r *http.Request, dst any) bool {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
-	decoder.DisallowUnknownFields()
+// decodeOperands reads a JSON object containing exactly the named numeric
+// fields, writing an error response and returning false if the body is anything
+// else. It reads the whole body first so that the size limit applies however the
+// body is malformed, and decodes into a map because map keys match exactly,
+// whereas struct fields ignore case. Pointer values tell a null from a zero.
+func decodeOperands(w http.ResponseWriter, r *http.Request, names ...string) (map[string]float64, bool) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, codeRequestTooLarge, "the request body is too large")
+			return nil, false
+		}
+		writeInvalidRequest(w, names)
+		return nil, false
+	}
 
-	err := decoder.Decode(dst)
-	if err == nil {
-		err = expectEOF(decoder)
-	}
-	if err == nil {
-		return true
+	var fields map[string]*float64
+	if err := json.Unmarshal(body, &fields); err != nil || len(fields) != len(names) {
+		writeInvalidRequest(w, names)
+		return nil, false
 	}
 
-	var tooLarge *http.MaxBytesError
-	if errors.As(err, &tooLarge) {
-		writeError(w, http.StatusRequestEntityTooLarge, codeRequestTooLarge, "the request body is too large")
-	} else {
-		writeError(w, http.StatusBadRequest, codeInvalidRequest, "the request body must be a JSON object containing only the expected numeric fields")
+	operands := make(map[string]float64, len(names))
+	for _, name := range names {
+		value := fields[name]
+		if value == nil {
+			writeInvalidRequest(w, names)
+			return nil, false
+		}
+		operands[name] = *value
 	}
-	return false
+	return operands, true
 }
 
-// expectEOF reports an error if anything other than whitespace follows the
-// value the decoder has just read.
-func expectEOF(decoder *json.Decoder) error {
-	err := decoder.Decode(&struct{}{})
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err == nil {
-		return errors.New("unexpected data after JSON value")
-	}
-	return err
+func writeInvalidRequest(w http.ResponseWriter, names []string) {
+	message := "the request body must be a JSON object containing only the numeric fields: " + strings.Join(names, ", ")
+	writeError(w, http.StatusBadRequest, codeInvalidRequest, message)
 }
 
 // respond writes a calculation's outcome.

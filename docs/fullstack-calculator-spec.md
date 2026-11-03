@@ -113,6 +113,7 @@ A root README documents setup, API usage, and design rationale.
 
 - The backend uses Go 1.27 and only the standard library, including `net/http` method-and-path routing.
 - The frontend uses Node 26, npm, React, TypeScript, and Vite, with plain CSS and `useState`. It has no UI or state management libraries.
+- TypeScript stays on 6.0 because `typescript-eslint` doesn't support TypeScript 7 yet.
 - Go has no LTS programme, so 1.27 was chosen as the newest supported release. Node 26 is the current LTS line.
 - Tool versions are pinned consistently across mise, the Go module, and the Docker image. The existing mise pins (Go 1.23 and Node 22) must be updated.
 
@@ -152,8 +153,10 @@ All calculator routes use `POST` under `/api/v1`.
 | 422 | `undefined_result` | The result isn't a real number, such as the square root of a negative number or `(-8)^0.5` |
 | 422 | `result_out_of_range` | The result overflows `float64` |
 
+- A 500 with code `internal_error` is a defensive fallback for unexpected faults. No valid input should reach it.
 - A 400 means the request itself is wrong. A 422 means the request is well formed, but the maths has no representable answer.
-- Request fields decode in a way that distinguishes a missing value from zero, and unknown fields are rejected.
+- Request fields decode in a way that distinguishes a missing value from zero. Unknown fields are rejected, and field names are case-sensitive.
+- The size limit applies however the body is malformed, so the body is read in full before it's parsed.
 - JSON can't represent `Inf` or `NaN`, so a non-finite result must never reach the encoder.
 
 ### Numeric behaviour
@@ -168,9 +171,9 @@ All calculator routes use `POST` under `/api/v1`.
 - The UI is a single form, not a button keypad with chained input. Each submission makes one API call and shows one result.
 - The operation picker is a row of buttons with radio-group accessibility semantics.
 - The inputs and operation symbol are laid out like the expression, and the second input is hidden for square root.
-- Values persist across operation changes. Changing an input or the operation clears the current result.
+- Values persist across operation changes. Changing an input or the operation clears the current result and cancels any request in flight. Changing the operation also clears field errors, because they may no longer apply.
 - Calculation runs only on `=` or Enter, with no calculate-as-you-type. The submit button is disabled while a request is in flight.
-- Client-side validation checks only that inputs are present and are well-formed numbers, including a leading minus sign, decimals, and scientific notation.
+- Client-side validation checks only that inputs are present and are well-formed numbers that fit in a double, including a leading minus sign, decimals, and scientific notation. `JSON.stringify` would otherwise send `1e999` as `null`.
 - Maths rules live only on the server. The frontend maps stable error codes to fields, such as showing `division_by_zero` under `b` and a negative square root's `undefined_result` under `a`.
 - Errors that don't belong to one input appear as a form-level message in the result area. These are `result_out_of_range` from any operation and `undefined_result` from `power`.
 - Network failures appear in a general banner.

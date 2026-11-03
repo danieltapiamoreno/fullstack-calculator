@@ -1,18 +1,15 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { calculate } from './api'
+import type { CalculationOutcome } from './api'
 import { formatResult } from './format'
 import { OPERATIONS } from './operations'
+import type { Operation } from './operations'
 import { parseOperand } from './validation'
 
 type Field = 'a' | 'b'
 
-type Status =
-  | { kind: 'idle' }
-  | { kind: 'pending' }
-  | { kind: 'result'; value: number }
-  | { kind: 'rejected'; code: string }
-  | { kind: 'unavailable' }
+type Status = { kind: 'idle' } | { kind: 'pending' } | CalculationOutcome
 
 const IDLE: Status = { kind: 'idle' }
 
@@ -23,22 +20,20 @@ const REJECTION_MESSAGES: Record<string, string> = {
 }
 
 export function Calculator() {
-  const [operationId, setOperationId] = useState(OPERATIONS[0].id)
+  const [operation, setOperation] = useState(OPERATIONS[0])
   const [values, setValues] = useState<Record<Field, string>>({ a: '', b: '' })
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<Field, string>>>({})
   const [status, setStatus] = useState<Status>(IDLE)
-  // Identifies the latest request, so a response to outdated input can be ignored.
-  const latestRequest = useRef(0)
-
-  const operation = OPERATIONS.find(({ id }) => id === operationId)!
+  // Cancels the request in flight, so a response to outdated input is never shown.
+  const inFlightRequest = useRef<AbortController | null>(null)
 
   function resetStatus() {
-    latestRequest.current += 1
+    inFlightRequest.current?.abort()
     setStatus(IDLE)
   }
 
-  function handleOperationChange(id: string) {
-    setOperationId(id)
+  function handleOperationChange(next: Operation) {
+    setOperation(next)
     setFieldErrors({})
     resetStatus()
   }
@@ -60,17 +55,13 @@ export function Calculator() {
       return
     }
 
-    latestRequest.current += 1
-    const request = latestRequest.current
+    const controller = new AbortController()
+    inFlightRequest.current = controller
     setFieldErrors({})
     setStatus({ kind: 'pending' })
 
-    const outcome = await calculate(operation.id, { a: a.value, b: b.value })
-    if (request !== latestRequest.current) return
-
-    if (outcome.kind === 'success') {
-      setStatus({ kind: 'result', value: outcome.result })
-    } else {
+    const outcome = await calculate(operation.id, { a: a.value, b: b.value }, controller.signal)
+    if (!controller.signal.aborted) {
       setStatus(outcome)
     }
   }
@@ -117,16 +108,16 @@ export function Calculator() {
           <span id="operation-label" className="visually-hidden">
             Operation
           </span>
-          {OPERATIONS.map(({ id, label }) => (
-            <label key={id} className="operation">
+          {OPERATIONS.map((option) => (
+            <label key={option.id} className="operation">
               <input
                 type="radio"
                 name="operation"
-                value={id}
-                checked={id === operationId}
-                onChange={() => handleOperationChange(id)}
+                value={option.id}
+                checked={option.id === operation.id}
+                onChange={() => handleOperationChange(option)}
               />
-              <span>{label}</span>
+              <span>{option.label}</span>
             </label>
           ))}
         </div>
@@ -144,8 +135,8 @@ export function Calculator() {
       </form>
 
       <output className="result">
-        {status.kind === 'result' && (
-          <span className="result-value">{formatResult(status.value)}</span>
+        {status.kind === 'success' && (
+          <span className="result-value">{formatResult(status.result)}</span>
         )}
         {status.kind === 'rejected' && (
           <span className="result-error">

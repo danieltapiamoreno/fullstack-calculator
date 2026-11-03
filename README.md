@@ -125,6 +125,8 @@ The `code` value is stable and meant for programs to check. The `message` value 
 | 422 | `undefined_result` | The result isn't a real number, such as the square root of a negative number or `(-8)^0.5` |
 | 422 | `result_out_of_range` | The result is too large for `float64`, such as `10^10000` |
 
+A `500` with code `internal_error` is reserved for unexpected server faults and shouldn't occur in normal use.
+
 Unknown routes and wrong methods are the exception to this format: they return Go's default plain-text `404` and `405` responses.
 
 ### Edge cases
@@ -152,11 +154,11 @@ The trade-off is standard floating-point behaviour: the API returns `0.300000000
 
 A 400 means the request itself is wrong and the client needs to fix it. A 422 means the request is well formed, but the maths has no representable answer. Non-finite results have to be errors because JSON can't represent `Inf` or `NaN`.
 
-Request fields decode into pointers so that a missing `b` returns an error instead of silently becoming `0`.
+Request fields must match exactly, so a missing `b` returns an error instead of silently becoming `0`, and `{"A": 2}` isn't accepted as `a`. The server reads the whole body before parsing it, so the size limit applies however the body is malformed.
 
 ### Maths rules live only on the server
 
-The client checks that inputs are present and are well-formed numbers. Rules such as "can't divide by zero" live only in the backend, so there's a single source of truth. The UI maps stable error codes to the relevant field, which gives inline errors without parsing message text.
+The client checks that inputs are present, are well-formed numbers, and fit in a double, since `JSON.stringify` would turn `1e999` into `null`. Rules such as "can't divide by zero" live only in the backend, so there's a single source of truth. The UI maps stable error codes to the relevant field, which gives inline errors without parsing message text.
 
 Inputs use `type="text"` because `type="number"` reports an empty value for partial input, and some iOS decimal keyboards have no minus key.
 

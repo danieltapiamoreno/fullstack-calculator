@@ -3,16 +3,20 @@ export type CalculationOutcome =
   | { kind: 'rejected'; code: string }
   | { kind: 'unavailable' }
 
+export type Operands = { a: number; b?: number }
+
 /** Calls the API. It never throws: every failure is returned as an outcome. */
 export async function calculate(
   operation: string,
-  operands: Record<string, number>,
+  operands: Operands,
+  signal: AbortSignal,
 ): Promise<CalculationOutcome> {
   try {
     const response = await fetch(`/api/v1/${operation}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(operands),
+      signal,
     })
     const body = await response.json()
     if (typeof body?.result === 'number') {

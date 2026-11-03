@@ -14,25 +14,36 @@ function stubFetch(...responses: Response[]) {
   return fetchStub
 }
 
+function stubFailedFetch() {
+  vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch')))
+}
+
 function setup() {
   render(<Calculator />)
+  const user = userEvent.setup()
+  const first = screen.getByRole('textbox', { name: 'First number' })
+  const second = screen.getByRole('textbox', { name: 'Second number' })
+  const submit = screen.getByRole('button', { name: 'Calculate' })
   return {
-    user: userEvent.setup(),
-    first: screen.getByRole('textbox', { name: 'First number' }),
-    second: screen.getByRole('textbox', { name: 'Second number' }),
-    submit: screen.getByRole('button', { name: 'Calculate' }),
+    user,
+    first,
+    second,
+    submit,
     result: screen.getByRole('status'),
+    async calculate(a: string, b: string) {
+      await user.type(first, a)
+      await user.type(second, b)
+      await user.click(submit)
+    },
   }
 }
 
 describe('Calculator', () => {
   it('sends the operands to the API and shows the rounded result', async () => {
     const fetchStub = stubFetch(jsonResponse(200, { result: 0.30000000000000004 }))
-    const { user, first, second, submit, result } = setup()
+    const { calculate, result } = setup()
 
-    await user.type(first, '0.1')
-    await user.type(second, '0.2')
-    await user.click(submit)
+    await calculate('0.1', '0.2')
 
     expect(await within(result).findByText('0.3')).toBeInTheDocument()
     expect(fetchStub).toHaveBeenCalledOnce()
@@ -54,11 +65,9 @@ describe('Calculator', () => {
 
   it('accepts negative numbers and scientific notation', async () => {
     const fetchStub = stubFetch(jsonResponse(200, { result: 99999 }))
-    const { user, first, second, submit } = setup()
+    const { calculate } = setup()
 
-    await user.type(first, '-1')
-    await user.type(second, '1e5')
-    await user.click(submit)
+    await calculate('-1', '1e5')
 
     expect(JSON.parse(fetchStub.mock.calls[0][1]?.body as string)).toEqual({ a: -1, b: 100000 })
   })
@@ -107,11 +116,9 @@ describe('Calculator', () => {
 
   it('clears the result when an input changes', async () => {
     stubFetch(jsonResponse(200, { result: 5 }))
-    const { user, first, second, submit, result } = setup()
+    const { calculate, user, first, result } = setup()
 
-    await user.type(first, '2')
-    await user.type(second, '3')
-    await user.click(submit)
+    await calculate('2', '3')
     await within(result).findByText('5')
     await user.type(first, '1')
 
@@ -130,11 +137,9 @@ describe('Calculator', () => {
 
     it('disables the button and ignores another Enter press', async () => {
       const { fetchStub, respond } = stubPendingFetch()
-      const { user, first, second, submit, result } = setup()
+      const { calculate, user, second, submit, result } = setup()
 
-      await user.type(first, '2')
-      await user.type(second, '3')
-      await user.click(submit)
+      await calculate('2', '3')
       expect(submit).toBeDisabled()
       await user.type(second, '{Enter}')
       expect(fetchStub).toHaveBeenCalledOnce()
@@ -145,14 +150,13 @@ describe('Calculator', () => {
       expect(submit).toBeEnabled()
     })
 
-    it('ignores the response if an input changes before it arrives', async () => {
-      const { respond } = stubPendingFetch()
-      const { user, first, second, submit, result } = setup()
+    it('cancels the request and ignores its response if an input changes', async () => {
+      const { fetchStub, respond } = stubPendingFetch()
+      const { calculate, user, first, submit, result } = setup()
 
-      await user.type(first, '2')
-      await user.type(second, '3')
-      await user.click(submit)
+      await calculate('2', '3')
       await user.type(first, '1')
+      expect(fetchStub.mock.calls[0][1]?.signal?.aborted).toBe(true)
       expect(submit).toBeEnabled()
 
       respond(jsonResponse(200, { result: 5 }))
@@ -166,9 +170,7 @@ describe('Calculator', () => {
     async function submitValidInput(response: Response) {
       stubFetch(response)
       const context = setup()
-      await context.user.type(context.first, '1e308')
-      await context.user.type(context.second, '1e308')
-      await context.user.click(context.submit)
+      await context.calculate('1e308', '1e308')
       return context
     }
 
@@ -199,12 +201,10 @@ describe('Calculator', () => {
     const banner = "Couldn't reach the server. Check your connection and try again."
 
     it('shows a banner when the request fails', async () => {
-      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch')))
-      const { user, first, second, submit, result } = setup()
+      stubFailedFetch()
+      const { calculate, submit, result } = setup()
 
-      await user.type(first, '2')
-      await user.type(second, '3')
-      await user.click(submit)
+      await calculate('2', '3')
 
       expect(await screen.findByRole('alert')).toHaveTextContent(banner)
       expect(result).toBeEmptyDOMElement()
@@ -213,22 +213,18 @@ describe('Calculator', () => {
 
     it('shows a banner when the response is not the JSON the API returns', async () => {
       stubFetch(new Response('Bad Gateway', { status: 502 }))
-      const { user, first, second, submit } = setup()
+      const { calculate } = setup()
 
-      await user.type(first, '2')
-      await user.type(second, '3')
-      await user.click(submit)
+      await calculate('2', '3')
 
       expect(await screen.findByRole('alert')).toHaveTextContent(banner)
     })
 
     it('clears the banner when an input changes', async () => {
-      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch')))
-      const { user, first, second, submit } = setup()
+      stubFailedFetch()
+      const { calculate, user, first } = setup()
 
-      await user.type(first, '2')
-      await user.type(second, '3')
-      await user.click(submit)
+      await calculate('2', '3')
       await screen.findByRole('alert')
       await user.type(first, '1')
 

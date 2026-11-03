@@ -55,6 +55,8 @@ func TestRejectsInvalidRequests(t *testing.T) {
 		{name: "unknown field", body: `{"a": 2, "b": 3, "c": 4}`},
 		{name: "number too large for float64", body: `{"a": 1e999, "b": 3}`},
 		{name: "trailing data", body: `{"a": 2, "b": 3} {"a": 4}`},
+		{name: "field names in a different case", body: `{"A": 2, "B": 3}`},
+		{name: "extra field differing only in case", body: `{"a": 2, "b": 3, "A": 10}`},
 	}
 
 	for _, tt := range tests {
@@ -72,6 +74,10 @@ func TestRejectsOversizedBodies(t *testing.T) {
 	}{
 		{name: "oversized value", body: `{"a": 1` + strings.Repeat("0", 1024) + `, "b": 3}`},
 		{name: "valid request followed by padding", body: `{"a": 2, "b": 3}` + strings.Repeat(" ", 1024)},
+		{name: "wrong type followed by padding", body: `{"a": "2", "b": 3}` + strings.Repeat(" ", 2048)},
+		{name: "unknown field followed by padding", body: `{"a": 2, "b": 3, "c": 4}` + strings.Repeat(" ", 2048)},
+		{name: "malformed JSON followed by padding", body: `x` + strings.Repeat(" ", 2048)},
+		{name: "valid request followed by data and padding", body: `{"a": 2, "b": 3}x` + strings.Repeat(" ", 2048)},
 	}
 
 	for _, tt := range tests {
