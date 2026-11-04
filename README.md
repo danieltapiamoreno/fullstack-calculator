@@ -100,7 +100,7 @@ curl -X POST http://localhost:8080/api/v1/percentage \
 ```
 
 ```json
-{"result": 10}
+{"result":10}
 ```
 
 ### Error response
@@ -112,7 +112,7 @@ curl -X POST http://localhost:8080/api/v1/divide \
 ```
 
 ```json
-{"error": {"code": "division_by_zero", "message": "cannot divide by zero"}}
+{"error":{"code":"division_by_zero","message":"cannot divide by zero"}}
 ```
 
 The `code` value is stable and meant for programs to check. The `message` value is for people to read and may change.
@@ -133,6 +133,8 @@ Unknown routes and wrong methods are the exception to this format: they return G
 
 - `0^0` returns `1`, matching Go's `math.Pow`.
 - A result of `-0` is returned as `0`.
+- If a request repeats a field, such as `{"a":1,"a":2,"b":3}`, the last value is used.
+- `percentage` can return `result_out_of_range` for a result within rounding error of the largest `float64`, even when the exact answer fits.
 
 ## Design rationale
 
@@ -142,7 +144,7 @@ The UI has number inputs, a row of operation buttons, and an `=` button. Each su
 
 ### One route per operation
 
-Each operation's required fields are clear from its route, and the routes map directly to the required operations. They share one handler driven by a table of operations, so adding a route takes little code.
+Each operation's required fields are clear from its route, and the routes map directly to the required operations. They all come from one table of operations, with shared adapters for one-operand and two-operand calculations, so adding a route takes little code.
 
 ### `float64` instead of a decimal library
 
