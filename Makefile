@@ -1,8 +1,14 @@
-.PHONY: test lint build docker-run
+.PHONY: test coverage lint build docker-run
 
 test: frontend/node_modules
 	cd backend && go test ./...
 	cd frontend && npm test
+
+coverage: frontend/node_modules
+	cd backend && go test -coverprofile=coverage.out ./...
+	cd backend && go tool cover -func=coverage.out
+	cd backend && go tool cover -html=coverage.out -o coverage.html
+	cd frontend && npm run coverage
 
 lint: frontend/node_modules
 	@unformatted="$$(cd backend && gofmt -l .)"; \

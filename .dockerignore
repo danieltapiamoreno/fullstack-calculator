@@ -4,3 +4,6 @@
 **/dist
 **/*.tsbuildinfo
 backend/bin
+**/coverage
+**/coverage.out
+**/coverage.html
