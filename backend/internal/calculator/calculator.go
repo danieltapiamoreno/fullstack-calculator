@@ -20,6 +20,16 @@ func Add(a, b float64) (float64, error) {
 	return checked(a + b)
 }
 
+// Subtract returns a - b.
+func Subtract(a, b float64) (float64, error) {
+	return checked(a - b)
+}
+
+// Multiply returns a * b.
+func Multiply(a, b float64) (float64, error) {
+	return checked(a * b)
+}
+
 // checked rejects non-finite results and normalises -0 to 0. Every operation
 // returns through it, so callers never receive a value JSON can't represent.
 func checked(result float64) (float64, error) {

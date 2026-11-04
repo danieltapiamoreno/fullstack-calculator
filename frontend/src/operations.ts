@@ -5,4 +5,8 @@ export type Operation = {
   symbol: string
 }
 
-export const OPERATIONS: readonly Operation[] = [{ id: 'add', label: 'Add', symbol: '+' }]
+export const OPERATIONS: readonly Operation[] = [
+  { id: 'add', label: 'Add', symbol: '+' },
+  { id: 'subtract', label: 'Subtract', symbol: '−' },
+  { id: 'multiply', label: 'Multiply', symbol: '×' },
+]

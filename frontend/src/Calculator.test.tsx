@@ -79,6 +79,93 @@ describe('Calculator', () => {
     expect(within(group).getByRole('radio', { name: 'Add' })).toBeChecked()
   })
 
+  it.each([
+    { label: 'Subtract', symbol: '−', route: '/api/v1/subtract', answer: -1, shown: '-1' },
+    { label: 'Multiply', symbol: '×', route: '/api/v1/multiply', answer: 6, shown: '6' },
+  ])(
+    'calculates with $label and shows its symbol in the form',
+    async ({ label, symbol, route, answer, shown }) => {
+      const fetchStub = stubFetch(jsonResponse(200, { result: answer }))
+      const { calculate, user, result } = setup()
+
+      await user.click(screen.getByRole('radio', { name: label }))
+      expect(screen.getByText(symbol)).toBeInTheDocument()
+      expect(screen.queryByText('+')).not.toBeInTheDocument()
+      await calculate('2', '3')
+
+      expect(await within(result).findByText(shown)).toBeInTheDocument()
+      expect(fetchStub.mock.calls[0][0]).toBe(route)
+      expect(JSON.parse(fetchStub.mock.calls[0][1]?.body as string)).toEqual({ a: 2, b: 3 })
+    },
+  )
+
+  describe('when the operation changes', () => {
+    async function switchOperation(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole('radio', { name: 'Subtract' }))
+    }
+
+    it('keeps the entered values', async () => {
+      const { user, first, second } = setup()
+
+      await user.type(first, '2')
+      await user.type(second, '3')
+      await switchOperation(user)
+
+      expect(first).toHaveValue('2')
+      expect(second).toHaveValue('3')
+    })
+
+    it('clears the result', async () => {
+      stubFetch(jsonResponse(200, { result: 5 }))
+      const { calculate, user, result } = setup()
+
+      await calculate('2', '3')
+      await within(result).findByText('5')
+      await switchOperation(user)
+
+      expect(result).toBeEmptyDOMElement()
+    })
+
+    it('clears a form-level error', async () => {
+      stubFetch(jsonResponse(422, { error: { code: 'result_out_of_range', message: 'too large' } }))
+      const { calculate, user, result } = setup()
+
+      await calculate('1e308', '1e308')
+      await within(result).findByText('The result is too large to represent.')
+      await switchOperation(user)
+
+      expect(result).toBeEmptyDOMElement()
+    })
+
+    it('clears the field errors', async () => {
+      stubFetch()
+      const { user, first, second, submit } = setup()
+
+      await user.type(second, 'abc')
+      await user.click(submit)
+      expect(first).toBeInvalid()
+      expect(second).toBeInvalid()
+      await switchOperation(user)
+
+      expect(first).toBeValid()
+      expect(first).not.toHaveAccessibleDescription()
+      expect(second).toBeValid()
+      expect(second).not.toHaveAccessibleDescription()
+      expect(second).toHaveValue('abc')
+    })
+
+    it('clears the network failure banner', async () => {
+      stubFailedFetch()
+      const { calculate, user } = setup()
+
+      await calculate('2', '3')
+      await screen.findByRole('alert')
+      await switchOperation(user)
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+  })
+
   it('uses text inputs whose keyboard includes a minus sign on iOS', () => {
     const { first, second } = setup()
 
@@ -163,6 +250,63 @@ describe('Calculator', () => {
       await new Promise((resolve) => setTimeout(resolve))
 
       expect(result).toBeEmptyDOMElement()
+    })
+
+    it('cancels the request and ignores its response if the operation changes', async () => {
+      const { fetchStub, respond } = stubPendingFetch()
+      const { calculate, user, first, second, submit, result } = setup()
+
+      await calculate('2', '3')
+      await user.click(screen.getByRole('radio', { name: 'Multiply' }))
+      expect(fetchStub.mock.calls[0][1]?.signal?.aborted).toBe(true)
+      expect(submit).toBeEnabled()
+
+      respond(jsonResponse(200, { result: 5 }))
+      await new Promise((resolve) => setTimeout(resolve))
+
+      expect(result).toBeEmptyDOMElement()
+      expect(first).toHaveValue('2')
+      expect(second).toHaveValue('3')
+    })
+
+    it('shows no banner when switching operation aborts the request', async () => {
+      const fetchStub = vi.fn<typeof fetch>(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            )
+          }),
+      )
+      vi.stubGlobal('fetch', fetchStub)
+      const { calculate, user } = setup()
+
+      await calculate('2', '3')
+      await user.click(screen.getByRole('radio', { name: 'Multiply' }))
+      await new Promise((resolve) => setTimeout(resolve))
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('shows only the new answer when an old response arrives after switching and resubmitting', async () => {
+      const responders: ((response: Response) => void)[] = []
+      const fetchStub = vi.fn<typeof fetch>(
+        () => new Promise((resolve) => responders.push(resolve)),
+      )
+      vi.stubGlobal('fetch', fetchStub)
+      const { calculate, user, submit, result } = setup()
+
+      await calculate('2', '3')
+      await user.click(screen.getByRole('radio', { name: 'Multiply' }))
+      await user.click(submit)
+      expect(fetchStub.mock.calls[1][0]).toBe('/api/v1/multiply')
+
+      responders[1](jsonResponse(200, { result: 6 }))
+      await within(result).findByText('6')
+      responders[0](jsonResponse(200, { result: 5 }))
+      await new Promise((resolve) => setTimeout(resolve))
+
+      expect(result).toHaveTextContent('6')
     })
   })
 

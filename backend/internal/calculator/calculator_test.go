@@ -48,3 +48,81 @@ func TestAddNeverReturnsNegativeZero(t *testing.T) {
 		t.Errorf("Add(-0, -0) = %v, want positive zero", got)
 	}
 }
+
+func TestSubtract(t *testing.T) {
+	tests := []struct {
+		name    string
+		a, b    float64
+		want    float64
+		wantErr error
+	}{
+		{name: "whole numbers", a: 2, b: 3, want: -1},
+		{name: "subtracting a negative", a: 2, b: -3, want: 5},
+		{name: "decimals", a: 5.5, b: 2.25, want: 3.25},
+		{name: "keeps floating-point precision", a: 0.3, b: 0.1, want: 0.19999999999999998},
+		{name: "overflow", a: 1e308, b: -1e308, wantErr: calculator.ErrResultOutOfRange},
+		{name: "negative overflow", a: -1e308, b: 1e308, wantErr: calculator.ErrResultOutOfRange},
+		{name: "not a number", a: math.Inf(1), b: math.Inf(1), wantErr: calculator.ErrUndefinedResult},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := calculator.Subtract(tt.a, tt.b)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Subtract(%v, %v) error = %v, want %v", tt.a, tt.b, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("Subtract(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSubtractNeverReturnsNegativeZero(t *testing.T) {
+	got, err := calculator.Subtract(math.Copysign(0, -1), 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Signbit(got) {
+		t.Errorf("Subtract(-0, 0) = %v, want positive zero", got)
+	}
+}
+
+func TestMultiply(t *testing.T) {
+	tests := []struct {
+		name    string
+		a, b    float64
+		want    float64
+		wantErr error
+	}{
+		{name: "whole numbers", a: 2, b: 3, want: 6},
+		{name: "negative numbers", a: -2, b: 3, want: -6},
+		{name: "decimals", a: 1.5, b: 2.5, want: 3.75},
+		{name: "keeps floating-point precision", a: 0.1, b: 0.2, want: 0.020000000000000004},
+		{name: "overflow", a: 1e308, b: 10, wantErr: calculator.ErrResultOutOfRange},
+		{name: "negative overflow", a: 1e308, b: -10, wantErr: calculator.ErrResultOutOfRange},
+		{name: "not a number", a: 0, b: math.Inf(1), wantErr: calculator.ErrUndefinedResult},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := calculator.Multiply(tt.a, tt.b)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Multiply(%v, %v) error = %v, want %v", tt.a, tt.b, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("Multiply(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMultiplyNeverReturnsNegativeZero(t *testing.T) {
+	got, err := calculator.Multiply(0, -1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Signbit(got) {
+		t.Errorf("Multiply(0, -1) = %v, want positive zero", got)
+	}
+}

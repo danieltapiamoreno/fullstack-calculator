@@ -113,6 +113,61 @@ func TestNegativeZeroIsReturnedAsZero(t *testing.T) {
 	}
 }
 
+func TestSubtractAndMultiply(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		body string
+		want string
+	}{
+		{name: "subtract", path: "/api/v1/subtract", body: `{"a": 2, "b": 3}`, want: `{"result":-1}`},
+		{name: "multiply", path: "/api/v1/multiply", body: `{"a": 2, "b": 3}`, want: `{"result":6}`},
+		{name: "subtract negative zero", path: "/api/v1/subtract", body: `{"a": -0.0, "b": 0}`, want: `{"result":0}`},
+		{name: "multiply negative zero", path: "/api/v1/multiply", body: `{"a": 0, "b": -1}`, want: `{"result":0}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, tt.path, tt.body)
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body)
+			}
+			if got := strings.TrimSpace(response.Body.String()); got != tt.want {
+				t.Errorf("body = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSubtractAndMultiplyRejectBadInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		body       string
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "subtract overflow", path: "/api/v1/subtract", body: `{"a": 1e308, "b": -1e308}`, wantStatus: http.StatusUnprocessableEntity, wantCode: "result_out_of_range"},
+		{name: "multiply overflow", path: "/api/v1/multiply", body: `{"a": 1e308, "b": 10}`, wantStatus: http.StatusUnprocessableEntity, wantCode: "result_out_of_range"},
+		{name: "subtract malformed JSON", path: "/api/v1/subtract", body: `{"a": 2,`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "multiply malformed JSON", path: "/api/v1/multiply", body: `{"a": 2,`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "subtract missing b", path: "/api/v1/subtract", body: `{"a": 2}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "multiply missing b", path: "/api/v1/multiply", body: `{"a": 2}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "subtract wrong type", path: "/api/v1/subtract", body: `{"a": "2", "b": 3}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "multiply wrong type", path: "/api/v1/multiply", body: `{"a": "2", "b": 3}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "subtract unknown field", path: "/api/v1/subtract", body: `{"a": 2, "b": 3, "c": 4}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "multiply unknown field", path: "/api/v1/multiply", body: `{"a": 2, "b": 3, "c": 4}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, tt.path, tt.body)
+			assertError(t, response, tt.wantStatus, tt.wantCode)
+		})
+	}
+}
+
 func TestUnknownRoutesAndWrongMethodsUseDefaultResponses(t *testing.T) {
 	tests := []struct {
 		name       string
