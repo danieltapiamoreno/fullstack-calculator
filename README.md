@@ -8,37 +8,47 @@ All calculation happens on the backend. The frontend collects input, sends it to
 .
 ├── backend/
 │   ├── cmd/server/          # Entry point: configuration, wiring, graceful shutdown
-│   └── internal/
-│       ├── api/             # Routing, request decoding, error-to-status mapping
-│       └── calculator/      # Pure maths and typed errors, with no HTTP code
+│   ├── internal/
+│   │   ├── api/             # Routing, request decoding, error-to-status mapping
+│   │   └── calculator/      # Pure maths and typed errors, with no HTTP code
+│   └── Dockerfile           # Backend image
 ├── frontend/                # React + TypeScript app built with Vite
-├── Dockerfile               # Builds one image containing the API and frontend
-├── Makefile                 # test, lint, build, and docker-run commands
+│   ├── Dockerfile           # Frontend image: nginx serving the built app
+│   └── nginx.conf           # Serves the app and forwards API requests to the backend
+├── docs/                    # Spec, tickets, and AI prompt log
+├── docker-compose.yml       # Runs the backend and frontend together
+├── Dockerfile               # Alternative: one image containing the API and frontend
+├── Makefile                 # test, coverage, lint, build, and Docker commands
 └── mise.toml                # Pinned Go and Node versions
 ```
 
-## Setup
+## Prerequisites
 
-### Run with Docker
+| Tool | Version | Needed for |
+|---|---|---|
+| [Docker](https://docs.docker.com/get-docker/) with Compose v2 | Any recent version | Running the stack in containers. Nothing else is needed for this option. |
+| [Go](https://go.dev/dl/) | 1.27 | Running and testing the backend locally |
+| [Node.js](https://nodejs.org/) and npm | 26 | Running and testing the frontend locally |
+| Make | Any | Optional shortcuts for the commands below |
 
-You only need Docker for this option.
+If you use [mise](https://mise.jdx.dev), `mise install` installs the pinned Go and Node versions.
+
+## Run with Docker Compose
 
 ```sh
-make docker-run
+docker compose up --build
 ```
 
-Or run the equivalent commands without Make:
+| URL | What it serves |
+|---|---|
+| <http://localhost:3000> | The calculator. nginx serves the app and forwards `/api` and `/healthz` to the backend. |
+| <http://localhost:8080> | The API directly, as used by the `curl` examples below |
 
-```sh
-docker build -t fullstack-calculator .
-docker run --rm -p 8080:8080 fullstack-calculator
-```
+To run it in the background and wait until it's healthy, use `docker compose up --build -d --wait`. To stop it, use `docker compose down`.
 
-Then open <http://localhost:8080>.
+The frontend service's health check requests `/healthz` through nginx, so it fails if either service is down. The backend has no health check of its own because its distroless image has no shell or HTTP client to run one with.
 
-### Run locally
-
-You need Go 1.27 and Node 26. If you use [mise](https://mise.jdx.dev), `mise install` installs both.
+## Run locally
 
 Start the backend in one terminal:
 
@@ -71,13 +81,54 @@ The server reads two environment variables:
 | Command | What it does |
 |---|---|
 | `make test` | Runs the backend and frontend tests |
+| `make coverage` | Runs both test suites and writes coverage reports |
 | `make lint` | Runs `gofmt`, `go vet`, ESLint, and `tsc` |
 | `make build` | Builds the backend and frontend |
-| `make docker-run` | Builds the Docker image and runs it on port 8080 |
+| `make docker-up` | Builds and starts the stack with Docker Compose |
+| `make docker-run` | Builds the single-image alternative and runs it on port 8080 |
+
+## Tests and coverage
+
+Run everything from the repository root:
+
+```sh
+make test       # Both test suites
+make coverage   # Both test suites, with coverage reports
+```
+
+Or run each suite directly:
+
+```sh
+# Backend
+cd backend
+go test ./...
+go test -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out                  # Per-function summary
+go tool cover -html=coverage.out -o coverage.html # Line-by-line report
+
+# Frontend
+cd frontend
+npm test
+npm run coverage                                  # Summary, plus an HTML report
+```
+
+`make coverage` prints both summaries and writes these reports, which git ignores:
+
+- `backend/coverage.html`
+- `frontend/coverage/index.html`
+
+Coverage when this was last updated:
+
+| Module | Statements | What isn't covered |
+|---|---|---|
+| `internal/calculator` | 100% | Nothing |
+| `internal/api` | 93.4% | The `internal_error` fallback and a failed response write, which the handler's interface gives tests no way to trigger |
+| `cmd/server` | 0% | Configuration and shutdown wiring, which has no logic of its own and has no unit tests |
+| Frontend `src/` | 97.1% | A response that is valid JSON in an unexpected shape, and one defensive branch. `main.tsx` is excluded. |
 
 ## API
 
-All calculator routes use `POST`, and both requests and responses are JSON.
+All calculator routes use `POST`, and both requests and responses are JSON. The examples use port 8080, which is the backend in every way of running the project.
 
 | Route | Body | Result |
 |---|---|---|
@@ -91,31 +142,53 @@ All calculator routes use `POST`, and both requests and responses are JSON.
 
 `GET /healthz` returns `200` with `{"status":"ok"}`.
 
-### Successful response
+### Successful requests
+
+Every success returns `200` with `{"result": <number>}`.
 
 ```sh
+curl -X POST http://localhost:8080/api/v1/add \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 2, "b": 3}'
+# {"result":5}
+
+curl -X POST http://localhost:8080/api/v1/subtract \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 2, "b": 3}'
+# {"result":-1}
+
+curl -X POST http://localhost:8080/api/v1/multiply \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 2, "b": 3}'
+# {"result":6}
+
+curl -X POST http://localhost:8080/api/v1/divide \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 6, "b": 3}'
+# {"result":2}
+
+curl -X POST http://localhost:8080/api/v1/power \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 2, "b": 10}'
+# {"result":1024}
+
 curl -X POST http://localhost:8080/api/v1/percentage \
   -H 'Content-Type: application/json' \
   -d '{"a": 20, "b": 50}'
-```
+# {"result":10}
 
-```json
-{"result":10}
-```
-
-### Error response
-
-```sh
-curl -X POST http://localhost:8080/api/v1/divide \
+curl -X POST http://localhost:8080/api/v1/sqrt \
   -H 'Content-Type: application/json' \
-  -d '{"a": 1, "b": 0}'
+  -d '{"a": 9}'
+# {"result":3}
+
+curl http://localhost:8080/healthz
+# {"status":"ok"}
 ```
 
-```json
-{"error":{"code":"division_by_zero","message":"cannot divide by zero"}}
-```
+### Error responses
 
-The `code` value is stable and meant for programs to check. The `message` value is for people to read and may change.
+Errors have the shape `{"error": {"code": <string>, "message": <string>}}`. The `code` value is stable and meant for programs to check. The `message` value is for people to read and may change.
 
 | Status | Code | When it's returned |
 |---|---|---|
@@ -127,7 +200,69 @@ The `code` value is stable and meant for programs to check. The `message` value 
 
 A `500` with code `internal_error` is reserved for unexpected server faults and shouldn't occur in normal use.
 
+Add `-i` to any of these commands to see the status code.
+
+```sh
+# 400: malformed JSON
+curl -X POST http://localhost:8080/api/v1/add \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 2,'
+# {"error":{"code":"invalid_request","message":"the request body must be a JSON object containing only the numeric fields: a, b"}}
+
+# 400: missing field, which never silently becomes 0
+curl -X POST http://localhost:8080/api/v1/add \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 2}'
+# {"error":{"code":"invalid_request","message":"the request body must be a JSON object containing only the numeric fields: a, b"}}
+
+# 400: wrong type
+curl -X POST http://localhost:8080/api/v1/add \
+  -H 'Content-Type: application/json' \
+  -d '{"a": "2", "b": 3}'
+# {"error":{"code":"invalid_request","message":"the request body must be a JSON object containing only the numeric fields: a, b"}}
+
+# 400: unknown field
+curl -X POST http://localhost:8080/api/v1/sqrt \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 9, "b": 3}'
+# {"error":{"code":"invalid_request","message":"the request body must be a JSON object containing only the numeric fields: a"}}
+
+# 413: body larger than 1 KB
+head -c 2048 /dev/zero | tr '\0' ' ' | curl -X POST http://localhost:8080/api/v1/add \
+  -H 'Content-Type: application/json' \
+  --data-binary @-
+# {"error":{"code":"request_too_large","message":"the request body is too large"}}
+
+# 422: division by zero
+curl -X POST http://localhost:8080/api/v1/divide \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 1, "b": 0}'
+# {"error":{"code":"division_by_zero","message":"cannot divide by zero"}}
+
+# 422: no real result
+curl -X POST http://localhost:8080/api/v1/sqrt \
+  -H 'Content-Type: application/json' \
+  -d '{"a": -1}'
+# {"error":{"code":"undefined_result","message":"the result is not a real number"}}
+
+# 422: result too large
+curl -X POST http://localhost:8080/api/v1/multiply \
+  -H 'Content-Type: application/json' \
+  -d '{"a": 1e308, "b": 10}'
+# {"error":{"code":"result_out_of_range","message":"the result is too large to represent"}}
+```
+
 Unknown routes and wrong methods are the exception to this format: they return Go's default plain-text `404` and `405` responses.
+
+```sh
+# 404: unknown route
+curl -X POST http://localhost:8080/api/v1/unknown
+# 404 page not found
+
+# 405: wrong method
+curl http://localhost:8080/api/v1/add
+# Method Not Allowed
+```
 
 ### Edge cases
 
@@ -136,7 +271,7 @@ Unknown routes and wrong methods are the exception to this format: they return G
 - If a request repeats a field, such as `{"a":1,"a":2,"b":3}`, the last value is used.
 - `percentage` can return `result_out_of_range` for a result within rounding error of the largest `float64`, even when the exact answer fits.
 
-## Design rationale
+## Key design decisions
 
 ### Single-operation form instead of a button keypad
 
@@ -168,11 +303,17 @@ Inputs use `type="text"` because `type="number"` reports an empty value for part
 
 `internal/calculator` knows nothing about HTTP, so the maths can be tested directly with table-driven tests. `internal/api` is tested separately through `httptest`.
 
-### One image and one origin
+### Separate containers behind one origin
 
-Go serves both the API and the built frontend from a single port, so deployment is one `docker run` with no nginx, Compose, or production CORS configuration.
+Docker Compose runs the backend and frontend as separate images, so each can be built, replaced, and restarted on its own. Both are multi-stage builds, so the final images contain no compilers, `node_modules`, or source code, and both run as non-root users. The backend image is distroless.
 
-The server reads frontend files from `STATIC_DIR` rather than using `go:embed`. That way, `go build` and `go test` don't depend on a built frontend. The app has no client-side routes, so a plain file server is enough. The final image is distroless and runs as a non-root user.
+nginx forwards `/api` to the backend, so the browser only ever talks to one origin and neither Compose nor local development needs CORS configuration. It also means the app calls the same relative URLs under Vite, nginx, and the single image.
+
+### A single-image alternative
+
+The root `Dockerfile` builds one image in which the Go server also serves the frontend from `STATIC_DIR`, for deployments that want one process and one port with no nginx. `make docker-run` builds and runs it.
+
+The server reads frontend files from a directory rather than using `go:embed`. That way, `go build` and `go test` don't depend on a built frontend. The app has no client-side routes, so a plain file server is enough.
 
 ### Minimal dependencies
 
@@ -180,7 +321,7 @@ The backend uses only the Go standard library, including `net/http` method-and-p
 
 ### Testing scope
 
-- **Backend:** table-driven tests for the maths, and `httptest` tests for routes, status codes, and error bodies.
+- **Backend:** table-driven tests for the maths, and `httptest` tests for routes, status codes, and error bodies. Request validation runs against every two-operand route, because they share one decoder.
 - **Frontend:** Vitest and React Testing Library tests for validation, display formatting, and the full form, with `fetch` stubbed.
 
 There's no end-to-end test suite, because the API and form tests cover the key behaviour without a browser-driven suite to maintain.
@@ -188,3 +329,7 @@ There's no end-to-end test suite, because the API and form tests cover the key b
 ### Intentionally left out
 
 History, authentication, persistence, metrics, and CI aren't included because the calculator's requirements don't need them.
+
+## AI prompt log
+
+This project was built with an AI coding assistant. [`docs/ai-prompts.md`](docs/ai-prompts.md) lists every prompt sent to it, in order, with notes on what each one produced.
