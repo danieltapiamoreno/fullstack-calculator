@@ -174,6 +174,72 @@ func TestDivideNeverReturnsNegativeZero(t *testing.T) {
 	}
 }
 
+func TestPower(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+
+	tests := []struct {
+		name    string
+		a, b    float64
+		want    float64
+		wantErr error
+	}{
+		{name: "whole numbers", a: 2, b: 3, want: 8},
+		{name: "negative base with an even exponent", a: -2, b: 2, want: 4},
+		{name: "negative base with an odd exponent", a: -2, b: 3, want: -8},
+		{name: "negative exponent", a: 2, b: -1, want: 0.5},
+		{name: "fractional exponent", a: 9, b: 0.5, want: 3},
+		{name: "keeps floating-point precision", a: 2, b: 0.5, want: 1.4142135623730951},
+		{name: "zero to the zero", a: 0, b: 0, want: 1},
+		{name: "negative zero to the zero", a: negativeZero, b: 0, want: 1},
+		{name: "zero to a positive power", a: 0, b: 5, want: 0},
+		{name: "underflows to zero", a: 10, b: -10000, want: 0},
+		{name: "zero to a negative power", a: 0, b: -1, wantErr: calculator.ErrDivisionByZero},
+		{name: "zero to a negative even power", a: 0, b: -2, wantErr: calculator.ErrDivisionByZero},
+		{name: "zero to a negative fractional power", a: 0, b: -0.5, wantErr: calculator.ErrDivisionByZero},
+		{name: "negative zero to a negative odd power", a: negativeZero, b: -1, wantErr: calculator.ErrDivisionByZero},
+		{name: "negative zero to a negative even power", a: negativeZero, b: -2, wantErr: calculator.ErrDivisionByZero},
+		{name: "negative base with a fractional exponent", a: -8, b: 0.5, wantErr: calculator.ErrUndefinedResult},
+		{name: "overflow", a: 10, b: 10000, wantErr: calculator.ErrResultOutOfRange},
+		{name: "negative overflow", a: -10, b: 10001, wantErr: calculator.ErrResultOutOfRange},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := calculator.Power(tt.a, tt.b)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Power(%v, %v) error = %v, want %v", tt.a, tt.b, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("Power(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPowerNeverReturnsNegativeZero(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+
+	tests := []struct {
+		name string
+		a, b float64
+	}{
+		{name: "negative zero to a positive odd power", a: negativeZero, b: 3},
+		{name: "negative result that underflows", a: -1e-200, b: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := calculator.Power(tt.a, tt.b)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != 0 || math.Signbit(got) {
+				t.Errorf("Power(%v, %v) = %v, want positive zero", tt.a, tt.b, got)
+			}
+		})
+	}
+}
+
 func TestPercentage(t *testing.T) {
 	tests := []struct {
 		name    string

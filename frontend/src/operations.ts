@@ -14,5 +14,6 @@ export const OPERATIONS: readonly Operation[] = [
   { id: 'subtract', label: 'Subtract', symbol: '−' },
   { id: 'multiply', label: 'Multiply', symbol: '×' },
   { id: 'divide', label: 'Divide', symbol: '÷', errorFields: { division_by_zero: 'b' } },
+  { id: 'power', label: 'Power', symbol: '^', errorFields: { division_by_zero: 'b' } },
   { id: 'percentage', label: 'Percentage', symbol: '% of' },
 ]

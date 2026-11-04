@@ -82,6 +82,7 @@ describe('Calculator', () => {
   it.each([
     { label: 'Subtract', symbol: '−', route: '/api/v1/subtract', answer: -1, shown: '-1' },
     { label: 'Multiply', symbol: '×', route: '/api/v1/multiply', answer: 6, shown: '6' },
+    { label: 'Power', symbol: '^', route: '/api/v1/power', answer: 8, shown: '8' },
   ])(
     'calculates with $label and shows its symbol in the form',
     async ({ label, symbol, route, answer, shown }) => {
@@ -430,6 +431,44 @@ describe('Calculator', () => {
     })
   })
 
+  describe('raising to a power', () => {
+    async function power(code: string, a: string, b: string) {
+      stubFetch(jsonResponse(422, { error: { code, message: 'server text' } }))
+      const context = setup()
+      await context.user.click(screen.getByRole('radio', { name: 'Power' }))
+      await context.calculate(a, b)
+      return context
+    }
+
+    it('shows division_by_zero under the second input, not the result area', async () => {
+      const { first, second, result } = await power('division_by_zero', '0', '-1')
+
+      expect(await screen.findByText('Cannot divide by zero.')).toBeInTheDocument()
+      expect(second).toBeInvalid()
+      expect(second).toHaveAccessibleDescription('Cannot divide by zero.')
+      expect(first).toBeValid()
+      expect(result).toBeEmptyDOMElement()
+    })
+
+    it('keeps undefined_result at form level, because power does not map it to a field', async () => {
+      const { first, second, result } = await power('undefined_result', '-8', '0.5')
+
+      expect(await within(result).findByText("The result isn't a real number.")).toBeInTheDocument()
+      expect(first).toBeValid()
+      expect(second).toBeValid()
+    })
+
+    it('shows result_out_of_range as a form-level message', async () => {
+      const { first, second, result } = await power('result_out_of_range', '10', '10000')
+
+      expect(
+        await within(result).findByText('The result is too large to represent.'),
+      ).toBeInTheDocument()
+      expect(first).toBeValid()
+      expect(second).toBeValid()
+    })
+  })
+
   describe('when the server reports an error', () => {
     async function submitValidInput(response: Response) {
       stubFetch(response)
@@ -446,16 +485,6 @@ describe('Calculator', () => {
       expect(
         await within(result).findByText('The result is too large to represent.'),
       ).toBeInTheDocument()
-      expect(first).toBeValid()
-      expect(second).toBeValid()
-    })
-
-    it('keeps a code at form level for an operation that does not map it to a field', async () => {
-      const { first, second, result } = await submitValidInput(
-        jsonResponse(422, { error: { code: 'division_by_zero', message: 'server text' } }),
-      )
-
-      expect(await within(result).findByText('Cannot divide by zero.')).toBeInTheDocument()
       expect(first).toBeValid()
       expect(second).toBeValid()
     })

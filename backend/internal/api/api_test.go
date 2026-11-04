@@ -258,6 +258,81 @@ func TestUnknownRoutesAndWrongMethodsUseDefaultResponses(t *testing.T) {
 	}
 }
 
+func TestPowerReturnsResult(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "whole numbers", body: `{"a": 2, "b": 3}`, want: `{"result":8}`},
+		{name: "zero to the zero", body: `{"a": 0, "b": 0}`, want: `{"result":1}`},
+		{name: "negative result that underflows", body: `{"a": -1e-200, "b": 3}`, want: `{"result":0}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/power", tt.body)
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body)
+			}
+			if got := strings.TrimSpace(response.Body.String()); got != tt.want {
+				t.Errorf("body = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPowerWithNoRepresentableAnswerIsUnprocessable(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantCode string
+	}{
+		{name: "zero to a negative power", body: `{"a": 0, "b": -1}`, wantCode: "division_by_zero"},
+		{name: "negative zero to a negative power", body: `{"a": -0.0, "b": -1}`, wantCode: "division_by_zero"},
+		{name: "not a real number", body: `{"a": -8, "b": 0.5}`, wantCode: "undefined_result"},
+		{name: "overflow", body: `{"a": 10, "b": 10000}`, wantCode: "result_out_of_range"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/power", tt.body)
+			assertError(t, response, http.StatusUnprocessableEntity, tt.wantCode)
+		})
+	}
+}
+
+func TestPowerRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{"a": 2,`},
+		{name: "missing a", body: `{"b": 3}`},
+		{name: "missing b never becomes zero", body: `{"a": 2}`},
+		{name: "null b never becomes zero", body: `{"a": 2, "b": null}`},
+		{name: "wrong type", body: `{"a": 2, "b": "3"}`},
+		{name: "unknown field", body: `{"a": 2, "b": 3, "c": 4}`},
+		{name: "number too large for float64", body: `{"a": 1e999, "b": 3}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/power", tt.body)
+			assertError(t, response, http.StatusBadRequest, "invalid_request")
+		})
+	}
+}
+
+func TestPowerRejectsOversizedBody(t *testing.T) {
+	body := `{"a": 2, "b": 3}` + strings.Repeat(" ", 1024)
+
+	response := send(t, http.MethodPost, "/api/v1/power", body)
+
+	assertError(t, response, http.StatusRequestEntityTooLarge, "request_too_large")
+}
+
 func TestPercentageReturnsResult(t *testing.T) {
 	tests := []struct {
 		name string

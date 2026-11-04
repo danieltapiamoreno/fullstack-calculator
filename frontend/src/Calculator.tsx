@@ -15,6 +15,7 @@ const FIELD_LABELS: Record<Field, string> = { a: 'First number', b: 'Second numb
 
 const REJECTION_MESSAGES: Record<string, string> = {
   division_by_zero: 'Cannot divide by zero.',
+  undefined_result: "The result isn't a real number.",
   result_out_of_range: 'The result is too large to represent.',
 }
 

@@ -30,6 +30,7 @@ var operations = map[string]http.HandlerFunc{
 	"subtract":   binary(calculator.Subtract),
 	"multiply":   binary(calculator.Multiply),
 	"divide":     binary(calculator.Divide),
+	"power":      binary(calculator.Power),
 	"percentage": binary(calculator.Percentage),
 }
 

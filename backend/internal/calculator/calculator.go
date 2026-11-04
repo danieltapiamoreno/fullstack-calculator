@@ -41,6 +41,16 @@ func Divide(a, b float64) (float64, error) {
 	return checked(a / b)
 }
 
+// Power returns a raised to the power of b, where 0^0 is 1. Raising zero to a
+// negative power divides by zero, and is caught here because math.Pow returns
+// ±Inf for it, which checked would report as out of range. -0 compares equal to 0.
+func Power(a, b float64) (float64, error) {
+	if a == 0 && b < 0 {
+		return 0, ErrDivisionByZero
+	}
+	return checked(math.Pow(a, b))
+}
+
 // Percentage returns a percent of b. It calculates a * b / 100 on the operands'
 // fractions and restores their exponents last, so the product can't overflow
 // on its own, as a * b would on 1e308 % of 50. Only a result within rounding
