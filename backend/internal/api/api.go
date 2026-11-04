@@ -58,25 +58,25 @@ func NewHandler(staticDir string) http.Handler {
 	return withFiles
 }
 
-// staticFiles serves the files in dir to GET and HEAD requests only, because
-// http.FileServer alone would answer any method. It has its own mux because
-// "GET /" conflicts with the method-less API patterns it would otherwise share
-// one with. That pattern matches every path, so the mux would call any other
-// method on an unknown path a 405, and a path with no file gets its 404 first.
+// staticFiles serves the files in dir to GET and HEAD requests, because
+// http.FileServer alone would answer any method. Other methods get a 405 on a path
+// that exists and a 404 on one that doesn't.
 func staticFiles(dir string) http.Handler {
 	root := http.Dir(dir)
-	mux := http.NewServeMux()
-	mux.Handle("GET /", http.FileServer(root))
+	files := http.FileServer(root)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			file, err := root.Open(r.URL.Path)
-			if err != nil {
-				http.NotFound(w, r)
-				return
-			}
-			file.Close()
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			files.ServeHTTP(w, r)
+			return
 		}
-		mux.ServeHTTP(w, r)
+		file, err := root.Open(r.URL.Path)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		file.Close()
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 	})
 }
 
