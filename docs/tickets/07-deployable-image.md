@@ -15,5 +15,3 @@
 - [x] `GET /healthz` returns 200 and `{"status": "ok"}`
 - [x] The server has timeouts configured and shuts down gracefully, letting in-flight requests finish
 - [x] API tests cover the health check and static serving, including API-only mode
-
-Not yet verified: the Docker image hasn't been built or run, because the Docker daemon wasn't available during implementation. The server binary was verified directly, outside a container.

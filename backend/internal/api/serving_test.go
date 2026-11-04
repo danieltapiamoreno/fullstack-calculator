@@ -121,6 +121,8 @@ func TestStaticServingDoesNotChangeDefaultResponses(t *testing.T) {
 		{name: "POST to the API root", method: http.MethodPost, path: "/api", wantStatus: http.StatusNotFound},
 		{name: "GET on the API root with a slash", method: http.MethodGet, path: "/api/", wantStatus: http.StatusNotFound},
 		{name: "GET on an unknown path", method: http.MethodGet, path: "/missing", wantStatus: http.StatusNotFound},
+		{name: "POST to an unknown path", method: http.MethodPost, path: "/missing", wantStatus: http.StatusNotFound},
+		{name: "PUT on an unknown nested path", method: http.MethodPut, path: "/assets/missing.js", wantStatus: http.StatusNotFound},
 	}
 
 	for _, mode := range modes(t) {
@@ -154,13 +156,20 @@ func TestAPIOnlyModeServesNoFrontend(t *testing.T) {
 }
 
 func TestStaticFilesRejectOtherMethods(t *testing.T) {
-	response := request(api.NewHandler(staticDir(t)), http.MethodPost, "/")
+	for _, path := range []string{"/", "/assets/app.js", "/assets/"} {
+		t.Run(path, func(t *testing.T) {
+			response := request(api.NewHandler(staticDir(t)), http.MethodPost, path)
 
-	if response.Code != http.StatusMethodNotAllowed {
-		t.Errorf("status = %d, want %d; body: %s", response.Code, http.StatusMethodNotAllowed, response.Body)
-	}
-	if got := response.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
-		t.Errorf("Content-Type = %q, want text/plain", got)
+			if response.Code != http.StatusMethodNotAllowed {
+				t.Errorf("status = %d, want %d; body: %s", response.Code, http.StatusMethodNotAllowed, response.Body)
+			}
+			if got := response.Header().Get("Allow"); got != "GET, HEAD" {
+				t.Errorf("Allow = %q, want GET, HEAD", got)
+			}
+			if got := response.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/plain") {
+				t.Errorf("Content-Type = %q, want text/plain", got)
+			}
+		})
 	}
 }
 
