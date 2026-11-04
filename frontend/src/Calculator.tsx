@@ -53,9 +53,12 @@ export function Calculator() {
     if (status.kind === 'pending') return
 
     const a = parseOperand(values.a)
-    const b = parseOperand(values.b)
-    if (!a.ok || !b.ok) {
-      setFieldErrors({ a: a.ok ? undefined : a.message, b: b.ok ? undefined : b.message })
+    const b = operation.oneInput ? null : parseOperand(values.b)
+    if (!a.ok || b?.ok === false) {
+      setFieldErrors({
+        a: a.ok ? undefined : a.message,
+        b: b?.ok === false ? b.message : undefined,
+      })
       return
     }
 
@@ -64,7 +67,8 @@ export function Calculator() {
     setFieldErrors({})
     setStatus({ kind: 'pending' })
 
-    const outcome = await calculate(operation.id, { a: a.value, b: b.value }, controller.signal)
+    const operands = b === null ? { a: a.value } : { a: a.value, b: b.value }
+    const outcome = await calculate(operation.id, operands, controller.signal)
     if (controller.signal.aborted) return
 
     const errorField = outcome.kind === 'rejected' ? operation.errorFields?.[outcome.code] : undefined
@@ -103,6 +107,12 @@ export function Calculator() {
     )
   }
 
+  const symbol = (
+    <span className="symbol" aria-hidden="true">
+      {operation.symbol}
+    </span>
+  )
+
   return (
     <main className="calculator">
       <h1>Calculator</h1>
@@ -132,12 +142,11 @@ export function Calculator() {
           ))}
         </div>
 
-        <div className="expression">
+        <div className={operation.oneInput ? 'expression expression-one-input' : 'expression'}>
+          {operation.oneInput && symbol}
           {renderInput('a')}
-          <span className="symbol" aria-hidden="true">
-            {operation.symbol}
-          </span>
-          {renderInput('b')}
+          {!operation.oneInput && symbol}
+          {!operation.oneInput && renderInput('b')}
           <button type="submit" aria-label="Calculate" disabled={status.kind === 'pending'}>
             =
           </button>

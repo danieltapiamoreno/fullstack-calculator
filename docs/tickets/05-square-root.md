@@ -4,13 +4,13 @@
 
 **Blocked by:** 01 (Add: first working calculation)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `POST /api/v1/sqrt` with `{"a": 9}` returns `{"result": 3}`
-- [ ] Square root appears in the picker and hides the second input
-- [ ] A value entered for `b` is kept and reappears when switching back to a two-input operation
-- [ ] A hidden `b` is neither validated nor sent to the API
-- [ ] A negative `a` returns 422 with code `undefined_result`, and the form shows it under `a`
-- [ ] A request containing `b` returns 400 with code `invalid_request`
-- [ ] A missing `a` and other invalid requests return 400, as `add` does
-- [ ] Calculator, API, and form tests cover the behaviour above
+- [x] `POST /api/v1/sqrt` with `{"a": 9}` returns `{"result": 3}`
+- [x] Square root appears in the picker and hides the second input
+- [x] A value entered for `b` is kept and reappears when switching back to a two-input operation
+- [x] A hidden `b` is neither validated nor sent to the API
+- [x] A negative `a` returns 422 with code `undefined_result`, and the form shows it under `a`
+- [x] A request containing `b` returns 400 with code `invalid_request`
+- [x] A missing `a` and other invalid requests return 400, as `add` does
+- [x] Calculator, API, and form tests cover the behaviour above

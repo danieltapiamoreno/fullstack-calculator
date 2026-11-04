@@ -51,6 +51,12 @@ func Power(a, b float64) (float64, error) {
 	return checked(math.Pow(a, b))
 }
 
+// Sqrt returns the square root of a. A negative a has no real root, which
+// math.Sqrt reports as NaN and checked turns into ErrUndefinedResult.
+func Sqrt(a float64) (float64, error) {
+	return checked(math.Sqrt(a))
+}
+
 // Percentage returns a percent of b. It calculates a * b / 100 on the operands'
 // fractions and restores their exponents last, so the product can't overflow
 // on its own, as a * b would on 1e308 % of 50. Only a result within rounding

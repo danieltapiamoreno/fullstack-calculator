@@ -93,6 +93,11 @@ button:focus-visible {
   align-items: start;
 }
 
+/* The narrow layout's rule for .expression comes later, so it overrides this too. */
+.expression-one-input {
+  grid-template-columns: auto 1fr auto;
+}
+
 .field label {
   display: block;
   margin-bottom: 0.25rem;

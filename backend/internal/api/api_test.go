@@ -333,6 +333,73 @@ func TestPowerRejectsOversizedBody(t *testing.T) {
 	assertError(t, response, http.StatusRequestEntityTooLarge, "request_too_large")
 }
 
+func TestSqrtReturnsResult(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "perfect square", body: `{"a": 9}`, want: `{"result":3}`},
+		{name: "fraction", body: `{"a": 0.25}`, want: `{"result":0.5}`},
+		{name: "zero", body: `{"a": 0}`, want: `{"result":0}`},
+		{name: "negative zero", body: `{"a": -0}`, want: `{"result":0}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/sqrt", tt.body)
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body)
+			}
+			if got := strings.TrimSpace(response.Body.String()); got != tt.want {
+				t.Errorf("body = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSqrtOfNegativeReturnsUndefinedResult(t *testing.T) {
+	response := send(t, http.MethodPost, "/api/v1/sqrt", `{"a": -1}`)
+
+	assertError(t, response, http.StatusUnprocessableEntity, "undefined_result")
+}
+
+func TestSqrtRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{"a": 9,`},
+		{name: "empty body", body: ``},
+		{name: "JSON null", body: `null`},
+		{name: "not an object", body: `[9]`},
+		{name: "empty object", body: `{}`},
+		{name: "missing a", body: `{"b": 9}`},
+		{name: "null field", body: `{"a": null}`},
+		{name: "string field", body: `{"a": "9"}`},
+		{name: "contains b", body: `{"a": 9, "b": 3}`},
+		{name: "contains a null b", body: `{"a": 9, "b": null}`},
+		{name: "number too large for float64", body: `{"a": 1e999}`},
+		{name: "trailing data", body: `{"a": 9} {"a": 4}`},
+		{name: "field name in a different case", body: `{"A": 9}`},
+		{name: "extra field differing only in case", body: `{"a": 9, "A": 4}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/sqrt", tt.body)
+			assertError(t, response, http.StatusBadRequest, "invalid_request")
+		})
+	}
+}
+
+func TestSqrtRejectsOversizedBodies(t *testing.T) {
+	response := send(t, http.MethodPost, "/api/v1/sqrt", `{"a": 9}`+strings.Repeat(" ", 1024))
+
+	assertError(t, response, http.StatusRequestEntityTooLarge, "request_too_large")
+}
+
 func TestPercentageReturnsResult(t *testing.T) {
 	tests := []struct {
 		name string

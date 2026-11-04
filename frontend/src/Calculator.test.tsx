@@ -194,6 +194,164 @@ describe('Calculator', () => {
     })
   })
 
+  describe('square root', () => {
+    // The second input leaves the DOM on square root, so a reference to it from
+    // before switching can't be relied on. These tests look it up each time.
+    const firstInput = () => screen.getByRole('textbox', { name: 'First number' })
+    const secondInput = () => screen.getByRole('textbox', { name: 'Second number' })
+    const querySecondInput = () => screen.queryByRole('textbox', { name: 'Second number' })
+    const chooseSquareRoot = (user: ReturnType<typeof userEvent.setup>) =>
+      user.click(screen.getByRole('radio', { name: 'Square root' }))
+    const undefinedResult = () =>
+      jsonResponse(422, { error: { code: 'undefined_result', message: 'server text' } })
+
+    it('reads like the expression, with the symbol first and no second input', async () => {
+      const { user } = setup()
+
+      await chooseSquareRoot(user)
+
+      expect(screen.getByRole('radio', { name: 'Square root' })).toBeChecked()
+      expect(screen.getByText('√').parentElement).toHaveTextContent(/^√\s*First number/)
+      expect(querySecondInput()).not.toBeInTheDocument()
+    })
+
+    it('puts the symbol back between the inputs when switching away', async () => {
+      const { user } = setup()
+
+      await chooseSquareRoot(user)
+      await user.click(screen.getByRole('radio', { name: 'Divide' }))
+
+      expect(screen.getByText('÷').parentElement).toHaveTextContent(
+        /^First number\s*÷\s*Second number/,
+      )
+    })
+
+    it('sends only the first operand and shows the result', async () => {
+      const fetchStub = stubFetch(jsonResponse(200, { result: 3 }))
+      const { user, result, submit } = setup()
+
+      await chooseSquareRoot(user)
+      await user.type(firstInput(), '9')
+      await user.click(submit)
+
+      expect(await within(result).findByText('3')).toBeInTheDocument()
+      const [url, init] = fetchStub.mock.calls[0]
+      expect(url).toBe('/api/v1/sqrt')
+      expect(init?.body).toBe('{"a":9}')
+    })
+
+    it('submits when the user presses Enter', async () => {
+      stubFetch(jsonResponse(200, { result: 3 }))
+      const { user, result } = setup()
+
+      await chooseSquareRoot(user)
+      await user.type(firstInput(), '9{Enter}')
+
+      expect(await within(result).findByText('3')).toBeInTheDocument()
+    })
+
+    it.each([
+      { label: 'text that is not a number', typed: 'abc' },
+      { label: 'a valid number', typed: '5' },
+    ])('neither validates nor sends a hidden second input holding $label', async ({ typed }) => {
+      const fetchStub = stubFetch(jsonResponse(200, { result: 3 }))
+      const { user, second, submit, result } = setup()
+
+      await user.type(second, typed)
+      await chooseSquareRoot(user)
+      await user.type(firstInput(), '9')
+      await user.click(submit)
+
+      expect(await within(result).findByText('3')).toBeInTheDocument()
+      expect(firstInput()).toBeValid()
+      expect(fetchStub.mock.calls[0][1]?.body).toBe('{"a":9}')
+    })
+
+    it('keeps a value for the second input and shows it again when switching back', async () => {
+      const { user, second } = setup()
+
+      await user.type(second, 'abc')
+      await chooseSquareRoot(user)
+      await user.click(screen.getByRole('radio', { name: 'Add' }))
+
+      expect(secondInput()).toHaveValue('abc')
+      expect(secondInput()).toBeValid()
+    })
+
+    it('validates the second input again once it is back', async () => {
+      const fetchStub = stubFetch()
+      const { user, submit } = setup()
+
+      await chooseSquareRoot(user)
+      await user.type(firstInput(), '9')
+      await user.click(screen.getByRole('radio', { name: 'Add' }))
+      await user.click(submit)
+
+      expect(secondInput()).toHaveAccessibleDescription('Enter a number.')
+      expect(firstInput()).toBeValid()
+      expect(fetchStub).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      { label: 'an empty input', typed: '', message: 'Enter a number.' },
+      { label: 'invalid text', typed: 'abc', message: 'Enter a valid number, like 12, -3.5, or 1e5.' },
+    ])('shows an error for $label without calling the API', async ({ typed, message }) => {
+      const fetchStub = stubFetch()
+      const { user, submit } = setup()
+
+      await chooseSquareRoot(user)
+      if (typed !== '') await user.type(firstInput(), typed)
+      await user.click(submit)
+
+      expect(firstInput()).toBeInvalid()
+      expect(firstInput()).toHaveAccessibleDescription(message)
+      expect(fetchStub).not.toHaveBeenCalled()
+    })
+
+    it('shows undefined_result under the input, not the result area', async () => {
+      stubFetch(undefinedResult())
+      const { user, submit, result } = setup()
+
+      await chooseSquareRoot(user)
+      await user.type(firstInput(), '-1')
+      await user.click(submit)
+
+      expect(await screen.findByText("The result isn't a real number.")).toBeInTheDocument()
+      expect(firstInput()).toBeInvalid()
+      expect(firstInput()).toHaveAccessibleDescription("The result isn't a real number.")
+      expect(result).toBeEmptyDOMElement()
+      expect(submit).toBeEnabled()
+    })
+
+    it('clears the undefined_result error when the input changes', async () => {
+      stubFetch(undefinedResult())
+      const { user, submit } = setup()
+
+      await chooseSquareRoot(user)
+      await user.type(firstInput(), '-1')
+      await user.click(submit)
+      await screen.findByText("The result isn't a real number.")
+      await user.type(firstInput(), '5')
+
+      expect(firstInput()).toBeValid()
+      expect(firstInput()).not.toHaveAccessibleDescription()
+    })
+
+    it('clears the undefined_result error when the operation changes', async () => {
+      stubFetch(undefinedResult())
+      const { user, submit } = setup()
+
+      await chooseSquareRoot(user)
+      await user.type(firstInput(), '-1')
+      await user.click(submit)
+      await screen.findByText("The result isn't a real number.")
+      await user.click(screen.getByRole('radio', { name: 'Add' }))
+
+      expect(firstInput()).toBeValid()
+      expect(firstInput()).toHaveValue('-1')
+    })
+  })
+
   it('uses text inputs whose keyboard includes a minus sign on iOS', () => {
     const { first, second } = setup()
 

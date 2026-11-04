@@ -31,6 +31,7 @@ var operations = map[string]http.HandlerFunc{
 	"multiply":   binary(calculator.Multiply),
 	"divide":     binary(calculator.Divide),
 	"power":      binary(calculator.Power),
+	"sqrt":       unary(calculator.Sqrt),
 	"percentage": binary(calculator.Percentage),
 }
 
@@ -81,6 +82,18 @@ func binary(calculate func(a, b float64) (float64, error)) http.HandlerFunc {
 			return
 		}
 		result, err := calculate(operands["a"], operands["b"])
+		respond(w, result, err)
+	}
+}
+
+// unary adapts a one-operand calculation into an HTTP handler.
+func unary(calculate func(a float64) (float64, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		operands, ok := decodeOperands(w, r, "a")
+		if !ok {
+			return
+		}
+		result, err := calculate(operands["a"])
 		respond(w, result, err)
 	}
 }

@@ -240,6 +240,50 @@ func TestPowerNeverReturnsNegativeZero(t *testing.T) {
 	}
 }
 
+func TestSqrt(t *testing.T) {
+	tests := []struct {
+		name    string
+		a       float64
+		want    float64
+		wantErr error
+	}{
+		{name: "perfect square", a: 9, want: 3},
+		{name: "fraction", a: 0.25, want: 0.5},
+		{name: "keeps floating-point precision", a: 2, want: 1.4142135623730951},
+		{name: "zero", a: 0, want: 0},
+		{name: "large number", a: 1e300, want: 1e150},
+		{name: "negative", a: -1, wantErr: calculator.ErrUndefinedResult},
+		{name: "smallest negative", a: -5e-324, wantErr: calculator.ErrUndefinedResult},
+		{name: "negative infinity", a: math.Inf(-1), wantErr: calculator.ErrUndefinedResult},
+		{name: "infinite input", a: math.Inf(1), wantErr: calculator.ErrResultOutOfRange},
+		{name: "not a number", a: math.NaN(), wantErr: calculator.ErrUndefinedResult},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := calculator.Sqrt(tt.a)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Sqrt(%v) error = %v, want %v", tt.a, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("Sqrt(%v) = %v, want %v", tt.a, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSqrtNeverReturnsNegativeZero(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+
+	got, err := calculator.Sqrt(negativeZero)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Signbit(got) {
+		t.Errorf("Sqrt(-0) = %v, want positive zero", got)
+	}
+}
+
 func TestPercentage(t *testing.T) {
 	tests := []struct {
 		name    string
