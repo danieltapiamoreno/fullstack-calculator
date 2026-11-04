@@ -21,7 +21,7 @@ func send(t *testing.T, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	recorder := httptest.NewRecorder()
-	api.NewHandler().ServeHTTP(recorder, request)
+	api.NewHandler("").ServeHTTP(recorder, request)
 	return recorder
 }
 

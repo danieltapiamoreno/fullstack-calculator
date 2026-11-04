@@ -33,13 +33,43 @@ var operations = map[string]http.HandlerFunc{
 	"percentage": binary(calculator.Percentage),
 }
 
-// NewHandler returns a handler serving every calculator route.
-func NewHandler() http.Handler {
+// NewHandler returns a handler serving every calculator route and the health
+// check, plus the files in staticDir unless it is empty.
+func NewHandler(staticDir string) http.Handler {
 	mux := http.NewServeMux()
 	for name, handler := range operations {
 		mux.Handle("POST "+routePrefix+name, handler)
 	}
+	mux.HandleFunc("GET /healthz", health)
+	if staticDir == "" {
+		return mux
+	}
+
+	// A "GET /" pattern on mux would match every API path too, turning its
+	// default 404 and 405 responses into file responses, so the API's paths are
+	// sent to mux before anything can reach the files.
+	withFiles := http.NewServeMux()
+	withFiles.Handle("/api", mux)
+	withFiles.Handle("/api/", mux)
+	withFiles.Handle("/healthz", mux)
+	withFiles.Handle("/", staticFiles(staticDir))
+	return withFiles
+}
+
+// staticFiles serves the files in dir to GET and HEAD requests only, because
+// http.FileServer alone would answer any method. It has its own mux because
+// "GET /" conflicts with the method-less API patterns it would otherwise share
+// one with.
+func staticFiles(dir string) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /", http.FileServer(http.Dir(dir)))
 	return mux
+}
+
+func health(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, struct {
+		Status string `json:"status"`
+	}{"ok"})
 }
 
 // binary adapts a two-operand calculation into an HTTP handler.

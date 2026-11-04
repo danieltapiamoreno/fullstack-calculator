@@ -1,4 +1,4 @@
-.PHONY: test lint build
+.PHONY: test lint build docker-run
 
 test: frontend/node_modules
 	cd backend && go test ./...
@@ -14,6 +14,10 @@ lint: frontend/node_modules
 build: frontend/node_modules
 	cd backend && go build -o bin/server ./cmd/server
 	cd frontend && npm run build
+
+docker-run:
+	docker build -t fullstack-calculator .
+	docker run --rm -p 8080:8080 fullstack-calculator
 
 frontend/node_modules: frontend/package-lock.json
 	cd frontend && npm ci
