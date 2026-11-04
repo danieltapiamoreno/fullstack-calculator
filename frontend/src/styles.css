@@ -67,7 +67,7 @@ h1 {
   align-items: center;
   justify-content: center;
   min-height: 2.75rem;
-  padding: 0 1rem;
+  padding: 0 0.75rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   cursor: pointer;
