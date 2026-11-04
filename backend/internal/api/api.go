@@ -26,10 +26,11 @@ const (
 
 // operations maps each route name to its handler.
 var operations = map[string]http.HandlerFunc{
-	"add":      binary(calculator.Add),
-	"subtract": binary(calculator.Subtract),
-	"multiply": binary(calculator.Multiply),
-	"divide":   binary(calculator.Divide),
+	"add":        binary(calculator.Add),
+	"subtract":   binary(calculator.Subtract),
+	"multiply":   binary(calculator.Multiply),
+	"divide":     binary(calculator.Divide),
+	"percentage": binary(calculator.Percentage),
 }
 
 // NewHandler returns a handler serving every calculator route.

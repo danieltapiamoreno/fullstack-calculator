@@ -4,11 +4,11 @@
 
 **Blocked by:** 01 (Add: first working calculation)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `POST /api/v1/percentage` with `{"a": 20, "b": 50}` returns `{"result": 10}`
-- [ ] Percentage appears in the picker, and the form reads like "20 % of 50"
-- [ ] Negative and decimal values calculate correctly
-- [ ] Overflow returns 422 with code `result_out_of_range`
-- [ ] Percentage rejects invalid requests with 400, as `add` does
-- [ ] Calculator, API, and form tests cover the behaviour above
+- [x] `POST /api/v1/percentage` with `{"a": 20, "b": 50}` returns `{"result": 10}`
+- [x] Percentage appears in the picker, and the form reads like "20 % of 50"
+- [x] Negative and decimal values calculate correctly
+- [x] Overflow returns 422 with code `result_out_of_range`
+- [x] Percentage rejects invalid requests with 400, as `add` does
+- [x] Calculator, API, and form tests cover the behaviour above

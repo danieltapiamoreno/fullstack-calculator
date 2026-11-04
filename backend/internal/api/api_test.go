@@ -258,6 +258,59 @@ func TestUnknownRoutesAndWrongMethodsUseDefaultResponses(t *testing.T) {
 	}
 }
 
+func TestPercentageReturnsResult(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "whole numbers", body: `{"a": 20, "b": 50}`, want: `{"result":10}`},
+		{name: "negative percent", body: `{"a": -20, "b": 50}`, want: `{"result":-10}`},
+		{name: "decimal percent", body: `{"a": 12.5, "b": 80}`, want: `{"result":10}`},
+		{name: "product overflows but the result fits", body: `{"a": 1e308, "b": 50}`, want: `{"result":5e+307}`},
+		{name: "negative zero", body: `{"a": 0, "b": -50}`, want: `{"result":0}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/percentage", tt.body)
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body)
+			}
+			if got := strings.TrimSpace(response.Body.String()); got != tt.want {
+				t.Errorf("body = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPercentageOverflowReturnsResultOutOfRange(t *testing.T) {
+	response := send(t, http.MethodPost, "/api/v1/percentage", `{"a": 1e308, "b": 1000}`)
+
+	assertError(t, response, http.StatusUnprocessableEntity, "result_out_of_range")
+}
+
+func TestPercentageRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{"a": 20,`},
+		{name: "missing b", body: `{"a": 20}`},
+		{name: "string field", body: `{"a": "20", "b": 50}`},
+		{name: "unknown field", body: `{"a": 20, "b": 50, "c": 1}`},
+		{name: "number too large for float64", body: `{"a": 1e999, "b": 50}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/percentage", tt.body)
+			assertError(t, response, http.StatusBadRequest, "invalid_request")
+		})
+	}
+}
+
 func assertError(t *testing.T, response *httptest.ResponseRecorder, wantStatus int, wantCode string) {
 	t.Helper()
 	if response.Code != wantStatus {

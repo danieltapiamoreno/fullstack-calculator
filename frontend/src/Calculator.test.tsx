@@ -166,6 +166,33 @@ describe('Calculator', () => {
     })
   })
 
+  describe('percentage', () => {
+    it('reads like "20 % of 50" once chosen', async () => {
+      const { user } = setup()
+      expect(screen.queryByText('% of')).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('radio', { name: 'Percentage' }))
+
+      expect(screen.getByRole('radio', { name: 'Percentage' })).toBeChecked()
+      expect(screen.getByText('% of').parentElement).toHaveTextContent(
+        /First number\s*% of\s*Second number/,
+      )
+    })
+
+    it('calculates through the percentage route', async () => {
+      const fetchStub = stubFetch(jsonResponse(200, { result: 10 }))
+      const { calculate, user, result } = setup()
+
+      await user.click(screen.getByRole('radio', { name: 'Percentage' }))
+      await calculate('20', '50')
+
+      expect(await within(result).findByText('10')).toBeInTheDocument()
+      const [url, init] = fetchStub.mock.calls[0]
+      expect(url).toBe('/api/v1/percentage')
+      expect(JSON.parse(init?.body as string)).toEqual({ a: 20, b: 50 })
+    })
+  })
+
   it('uses text inputs whose keyboard includes a minus sign on iOS', () => {
     const { first, second } = setup()
 
