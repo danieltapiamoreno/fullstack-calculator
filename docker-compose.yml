@@ -1,0 +1,24 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:8080"
+    depends_on:
+      backend:
+        condition: service_started
+        # nginx resolves the backend's address once, at startup, so it has to
+        # restart whenever the backend container is replaced.
+        restart: true
+    # The backend's distroless image has no shell or HTTP client to run a check
+    # with, so this one covers both services by going through nginx to /healthz.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
