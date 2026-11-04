@@ -4,10 +4,8 @@ import { calculate } from './api'
 import type { CalculationOutcome } from './api'
 import { formatResult } from './format'
 import { OPERATIONS } from './operations'
-import type { Operation } from './operations'
+import type { Field, Operation } from './operations'
 import { parseOperand } from './validation'
-
-type Field = 'a' | 'b'
 
 type Status = { kind: 'idle' } | { kind: 'pending' } | CalculationOutcome
 
@@ -16,7 +14,12 @@ const IDLE: Status = { kind: 'idle' }
 const FIELD_LABELS: Record<Field, string> = { a: 'First number', b: 'Second number' }
 
 const REJECTION_MESSAGES: Record<string, string> = {
+  division_by_zero: 'Cannot divide by zero.',
   result_out_of_range: 'The result is too large to represent.',
+}
+
+function rejectionMessage(code: string) {
+  return REJECTION_MESSAGES[code] ?? "The calculator couldn't complete that request."
 }
 
 export function Calculator() {
@@ -61,7 +64,13 @@ export function Calculator() {
     setStatus({ kind: 'pending' })
 
     const outcome = await calculate(operation.id, { a: a.value, b: b.value }, controller.signal)
-    if (!controller.signal.aborted) {
+    if (controller.signal.aborted) return
+
+    const errorField = outcome.kind === 'rejected' ? operation.errorFields?.[outcome.code] : undefined
+    if (outcome.kind === 'rejected' && errorField !== undefined) {
+      setFieldErrors({ [errorField]: rejectionMessage(outcome.code) })
+      setStatus(IDLE)
+    } else {
       setStatus(outcome)
     }
   }
@@ -139,9 +148,7 @@ export function Calculator() {
           <span className="result-value">{formatResult(status.result)}</span>
         )}
         {status.kind === 'rejected' && (
-          <span className="result-error">
-            {REJECTION_MESSAGES[status.code] ?? "The calculator couldn't complete that request."}
-          </span>
+          <span className="result-error">{rejectionMessage(status.code)}</span>
         )}
       </output>
     </main>

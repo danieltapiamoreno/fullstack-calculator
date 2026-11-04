@@ -168,6 +168,71 @@ func TestSubtractAndMultiplyRejectBadInput(t *testing.T) {
 	}
 }
 
+func TestDivideReturnsResult(t *testing.T) {
+	response := send(t, http.MethodPost, "/api/v1/divide", `{"a": 6, "b": 3}`)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", response.Code, http.StatusOK, response.Body)
+	}
+	if got := strings.TrimSpace(response.Body.String()); got != `{"result":2}` {
+		t.Errorf("body = %s, want {\"result\":2}", got)
+	}
+}
+
+func TestDivideByZeroReturnsDivisionByZero(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "zero divisor", body: `{"a": 1, "b": 0}`},
+		{name: "zero divided by zero", body: `{"a": 0, "b": 0}`},
+		{name: "negative zero divisor", body: `{"a": 1, "b": -0.0}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/divide", tt.body)
+
+			assertError(t, response, http.StatusUnprocessableEntity, "division_by_zero")
+			var body errorBody
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decoding error body %q: %v", response.Body, err)
+			}
+			if body.Error.Message != "cannot divide by zero" {
+				t.Errorf("error message = %q, want %q", body.Error.Message, "cannot divide by zero")
+			}
+		})
+	}
+}
+
+func TestDivideOverflowReturnsResultOutOfRange(t *testing.T) {
+	response := send(t, http.MethodPost, "/api/v1/divide", `{"a": 1e308, "b": 1e-308}`)
+
+	assertError(t, response, http.StatusUnprocessableEntity, "result_out_of_range")
+}
+
+func TestDivideRejectsInvalidRequests(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "malformed JSON", body: `{"a": 6,`},
+		{name: "missing a", body: `{"b": 3}`},
+		{name: "missing b never becomes zero", body: `{"a": 6}`},
+		{name: "null b never becomes zero", body: `{"a": 6, "b": null}`},
+		{name: "wrong type", body: `{"a": 6, "b": "3"}`},
+		{name: "unknown field", body: `{"a": 6, "b": 3, "c": 4}`},
+		{name: "number too large for float64", body: `{"a": 1e999, "b": 3}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := send(t, http.MethodPost, "/api/v1/divide", tt.body)
+			assertError(t, response, http.StatusBadRequest, "invalid_request")
+		})
+	}
+}
+
 func TestUnknownRoutesAndWrongMethodsUseDefaultResponses(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -308,6 +308,99 @@ describe('Calculator', () => {
 
       expect(result).toHaveTextContent('6')
     })
+
+    it('ignores a division_by_zero response to a cancelled request', async () => {
+      const { respond } = stubPendingFetch()
+      const { calculate, user, first, second, result } = setup()
+
+      await user.click(screen.getByRole('radio', { name: 'Divide' }))
+      await calculate('1', '0')
+      await user.type(first, '2')
+
+      respond(jsonResponse(422, { error: { code: 'division_by_zero', message: 'server text' } }))
+      await new Promise((resolve) => setTimeout(resolve))
+
+      expect(second).toBeValid()
+      expect(result).toBeEmptyDOMElement()
+    })
+  })
+
+  describe('dividing', () => {
+    const divisionByZero = () =>
+      jsonResponse(422, { error: { code: 'division_by_zero', message: 'server text' } })
+
+    async function divide(response: Response, a: string, b: string) {
+      const fetchStub = stubFetch(response)
+      const context = setup()
+      await context.user.click(screen.getByRole('radio', { name: 'Divide' }))
+      await context.calculate(a, b)
+      return { ...context, fetchStub }
+    }
+
+    it('shows the divide symbol when divide is chosen', async () => {
+      const { user } = setup()
+
+      await user.click(screen.getByRole('radio', { name: 'Divide' }))
+
+      expect(screen.getByText('÷')).toBeInTheDocument()
+      expect(screen.queryByText('+')).not.toBeInTheDocument()
+    })
+
+    it('sends the operands to the divide route and shows the result', async () => {
+      const { fetchStub, result } = await divide(jsonResponse(200, { result: 2 }), '6', '3')
+
+      expect(await within(result).findByText('2')).toBeInTheDocument()
+      const [url, init] = fetchStub.mock.calls[0]
+      expect(url).toBe('/api/v1/divide')
+      expect(JSON.parse(init?.body as string)).toEqual({ a: 6, b: 3 })
+    })
+
+    it('shows division_by_zero under the second input, not the result area', async () => {
+      const { first, second, submit, result } = await divide(divisionByZero(), '1', '0')
+
+      expect(await screen.findByText('Cannot divide by zero.')).toBeInTheDocument()
+      expect(second).toBeInvalid()
+      expect(second).toHaveAccessibleDescription('Cannot divide by zero.')
+      expect(first).toBeValid()
+      expect(result).toBeEmptyDOMElement()
+      expect(submit).toBeEnabled()
+    })
+
+    it('clears the division_by_zero error when the second input changes', async () => {
+      const { user, second } = await divide(divisionByZero(), '1', '0')
+      await screen.findByText('Cannot divide by zero.')
+      expect(second).toBeInvalid()
+
+      await user.type(second, '5')
+
+      expect(second).toBeValid()
+      expect(second).not.toHaveAccessibleDescription()
+    })
+
+    it('clears the division_by_zero error when the operation changes', async () => {
+      const { user, second } = await divide(divisionByZero(), '1', '0')
+      await screen.findByText('Cannot divide by zero.')
+      expect(second).toBeInvalid()
+
+      await user.click(screen.getByRole('radio', { name: 'Add' }))
+
+      expect(second).toBeValid()
+      expect(second).toHaveValue('0')
+    })
+
+    it('shows result_out_of_range as a form-level message', async () => {
+      const { first, second, result } = await divide(
+        jsonResponse(422, { error: { code: 'result_out_of_range', message: 'server text' } }),
+        '1e308',
+        '1e-308',
+      )
+
+      expect(
+        await within(result).findByText('The result is too large to represent.'),
+      ).toBeInTheDocument()
+      expect(first).toBeValid()
+      expect(second).toBeValid()
+    })
   })
 
   describe('when the server reports an error', () => {
@@ -326,6 +419,16 @@ describe('Calculator', () => {
       expect(
         await within(result).findByText('The result is too large to represent.'),
       ).toBeInTheDocument()
+      expect(first).toBeValid()
+      expect(second).toBeValid()
+    })
+
+    it('keeps a code at form level for an operation that does not map it to a field', async () => {
+      const { first, second, result } = await submitValidInput(
+        jsonResponse(422, { error: { code: 'division_by_zero', message: 'server text' } }),
+      )
+
+      expect(await within(result).findByText('Cannot divide by zero.')).toBeInTheDocument()
       expect(first).toBeValid()
       expect(second).toBeValid()
     })

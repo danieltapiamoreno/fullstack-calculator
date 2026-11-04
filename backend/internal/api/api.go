@@ -18,6 +18,7 @@ const (
 
 	codeInvalidRequest   = "invalid_request"
 	codeRequestTooLarge  = "request_too_large"
+	codeDivisionByZero   = "division_by_zero"
 	codeUndefinedResult  = "undefined_result"
 	codeResultOutOfRange = "result_out_of_range"
 	codeInternalError    = "internal_error"
@@ -28,6 +29,7 @@ var operations = map[string]http.HandlerFunc{
 	"add":      binary(calculator.Add),
 	"subtract": binary(calculator.Subtract),
 	"multiply": binary(calculator.Multiply),
+	"divide":   binary(calculator.Divide),
 }
 
 // NewHandler returns a handler serving every calculator route.
@@ -104,6 +106,8 @@ func respond(w http.ResponseWriter, result float64, err error) {
 
 func writeCalculationError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, calculator.ErrDivisionByZero):
+		writeError(w, http.StatusUnprocessableEntity, codeDivisionByZero, err.Error())
 	case errors.Is(err, calculator.ErrUndefinedResult):
 		writeError(w, http.StatusUnprocessableEntity, codeUndefinedResult, err.Error())
 	case errors.Is(err, calculator.ErrResultOutOfRange):

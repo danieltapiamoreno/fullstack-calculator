@@ -126,3 +126,50 @@ func TestMultiplyNeverReturnsNegativeZero(t *testing.T) {
 		t.Errorf("Multiply(0, -1) = %v, want positive zero", got)
 	}
 }
+
+func TestDivide(t *testing.T) {
+	negativeZero := math.Copysign(0, -1)
+
+	tests := []struct {
+		name    string
+		a, b    float64
+		want    float64
+		wantErr error
+	}{
+		{name: "whole numbers", a: 6, b: 3, want: 2},
+		{name: "fractional result", a: 7, b: 2, want: 3.5},
+		{name: "negative dividend", a: -6, b: 3, want: -2},
+		{name: "keeps floating-point precision", a: 1, b: 3, want: 0.3333333333333333},
+		{name: "zero dividend", a: 0, b: 5, want: 0},
+		{name: "zero divisor", a: 1, b: 0, wantErr: calculator.ErrDivisionByZero},
+		{name: "negative dividend and zero divisor", a: -1, b: 0, wantErr: calculator.ErrDivisionByZero},
+		{name: "zero divided by zero", a: 0, b: 0, wantErr: calculator.ErrDivisionByZero},
+		{name: "negative zero divisor", a: 1, b: negativeZero, wantErr: calculator.ErrDivisionByZero},
+		{name: "zero divided by negative zero", a: 0, b: negativeZero, wantErr: calculator.ErrDivisionByZero},
+		{name: "overflow", a: 1e308, b: 1e-308, wantErr: calculator.ErrResultOutOfRange},
+		{name: "negative overflow", a: -1e308, b: 1e-308, wantErr: calculator.ErrResultOutOfRange},
+		{name: "not a number", a: math.Inf(1), b: math.Inf(1), wantErr: calculator.ErrUndefinedResult},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := calculator.Divide(tt.a, tt.b)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Divide(%v, %v) error = %v, want %v", tt.a, tt.b, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("Divide(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDivideNeverReturnsNegativeZero(t *testing.T) {
+	got, err := calculator.Divide(0, -5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if math.Signbit(got) {
+		t.Errorf("Divide(0, -5) = %v, want positive zero", got)
+	}
+}
