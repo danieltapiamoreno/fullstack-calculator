@@ -1,4 +1,4 @@
-.PHONY: test coverage lint build docker-run
+.PHONY: test coverage lint build docker-run docker-up
 
 test: frontend/node_modules
 	cd backend && go test ./...
@@ -24,6 +24,9 @@ build: frontend/node_modules
 docker-run:
 	docker build -t fullstack-calculator .
 	docker run --rm -p 8080:8080 fullstack-calculator
+
+docker-up:
+	docker compose up --build
 
 frontend/node_modules: frontend/package-lock.json
 	cd frontend && npm ci
