@@ -17,6 +17,10 @@ type errorBody struct {
 	} `json:"error"`
 }
 
+// twoOperandRoutes all decode their body the same way, so the request-validation
+// tests run the same table against each one.
+var twoOperandRoutes = []string{"add", "subtract", "multiply", "divide", "power", "percentage"}
+
 func send(t *testing.T, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -59,11 +63,13 @@ func TestRejectsInvalidRequests(t *testing.T) {
 		{name: "extra field differing only in case", body: `{"a": 2, "b": 3, "A": 10}`},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			response := send(t, http.MethodPost, "/api/v1/add", tt.body)
-			assertError(t, response, http.StatusBadRequest, "invalid_request")
-		})
+	for _, route := range twoOperandRoutes {
+		for _, tt := range tests {
+			t.Run(route+"/"+tt.name, func(t *testing.T) {
+				response := send(t, http.MethodPost, "/api/v1/"+route, tt.body)
+				assertError(t, response, http.StatusBadRequest, "invalid_request")
+			})
+		}
 	}
 }
 
@@ -80,11 +86,13 @@ func TestRejectsOversizedBodies(t *testing.T) {
 		{name: "valid request followed by data and padding", body: `{"a": 2, "b": 3}x` + strings.Repeat(" ", 2048)},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			response := send(t, http.MethodPost, "/api/v1/add", tt.body)
-			assertError(t, response, http.StatusRequestEntityTooLarge, "request_too_large")
-		})
+	for _, route := range twoOperandRoutes {
+		for _, tt := range tests {
+			t.Run(route+"/"+tt.name, func(t *testing.T) {
+				response := send(t, http.MethodPost, "/api/v1/"+route, tt.body)
+				assertError(t, response, http.StatusRequestEntityTooLarge, "request_too_large")
+			})
+		}
 	}
 }
 
@@ -140,30 +148,20 @@ func TestSubtractAndMultiply(t *testing.T) {
 	}
 }
 
-func TestSubtractAndMultiplyRejectBadInput(t *testing.T) {
+func TestSubtractAndMultiplyOverflowReturnsResultOutOfRange(t *testing.T) {
 	tests := []struct {
-		name       string
-		path       string
-		body       string
-		wantStatus int
-		wantCode   string
+		name string
+		path string
+		body string
 	}{
-		{name: "subtract overflow", path: "/api/v1/subtract", body: `{"a": 1e308, "b": -1e308}`, wantStatus: http.StatusUnprocessableEntity, wantCode: "result_out_of_range"},
-		{name: "multiply overflow", path: "/api/v1/multiply", body: `{"a": 1e308, "b": 10}`, wantStatus: http.StatusUnprocessableEntity, wantCode: "result_out_of_range"},
-		{name: "subtract malformed JSON", path: "/api/v1/subtract", body: `{"a": 2,`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
-		{name: "multiply malformed JSON", path: "/api/v1/multiply", body: `{"a": 2,`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
-		{name: "subtract missing b", path: "/api/v1/subtract", body: `{"a": 2}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
-		{name: "multiply missing b", path: "/api/v1/multiply", body: `{"a": 2}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
-		{name: "subtract wrong type", path: "/api/v1/subtract", body: `{"a": "2", "b": 3}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
-		{name: "multiply wrong type", path: "/api/v1/multiply", body: `{"a": "2", "b": 3}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
-		{name: "subtract unknown field", path: "/api/v1/subtract", body: `{"a": 2, "b": 3, "c": 4}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
-		{name: "multiply unknown field", path: "/api/v1/multiply", body: `{"a": 2, "b": 3, "c": 4}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "subtract", path: "/api/v1/subtract", body: `{"a": 1e308, "b": -1e308}`},
+		{name: "multiply", path: "/api/v1/multiply", body: `{"a": 1e308, "b": 10}`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			response := send(t, http.MethodPost, tt.path, tt.body)
-			assertError(t, response, tt.wantStatus, tt.wantCode)
+			assertError(t, response, http.StatusUnprocessableEntity, "result_out_of_range")
 		})
 	}
 }
@@ -209,28 +207,6 @@ func TestDivideOverflowReturnsResultOutOfRange(t *testing.T) {
 	response := send(t, http.MethodPost, "/api/v1/divide", `{"a": 1e308, "b": 1e-308}`)
 
 	assertError(t, response, http.StatusUnprocessableEntity, "result_out_of_range")
-}
-
-func TestDivideRejectsInvalidRequests(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{name: "malformed JSON", body: `{"a": 6,`},
-		{name: "missing a", body: `{"b": 3}`},
-		{name: "missing b never becomes zero", body: `{"a": 6}`},
-		{name: "null b never becomes zero", body: `{"a": 6, "b": null}`},
-		{name: "wrong type", body: `{"a": 6, "b": "3"}`},
-		{name: "unknown field", body: `{"a": 6, "b": 3, "c": 4}`},
-		{name: "number too large for float64", body: `{"a": 1e999, "b": 3}`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			response := send(t, http.MethodPost, "/api/v1/divide", tt.body)
-			assertError(t, response, http.StatusBadRequest, "invalid_request")
-		})
-	}
 }
 
 func TestUnknownRoutesAndWrongMethodsUseDefaultResponses(t *testing.T) {
@@ -301,36 +277,6 @@ func TestPowerWithNoRepresentableAnswerIsUnprocessable(t *testing.T) {
 			assertError(t, response, http.StatusUnprocessableEntity, tt.wantCode)
 		})
 	}
-}
-
-func TestPowerRejectsInvalidRequests(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{name: "malformed JSON", body: `{"a": 2,`},
-		{name: "missing a", body: `{"b": 3}`},
-		{name: "missing b never becomes zero", body: `{"a": 2}`},
-		{name: "null b never becomes zero", body: `{"a": 2, "b": null}`},
-		{name: "wrong type", body: `{"a": 2, "b": "3"}`},
-		{name: "unknown field", body: `{"a": 2, "b": 3, "c": 4}`},
-		{name: "number too large for float64", body: `{"a": 1e999, "b": 3}`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			response := send(t, http.MethodPost, "/api/v1/power", tt.body)
-			assertError(t, response, http.StatusBadRequest, "invalid_request")
-		})
-	}
-}
-
-func TestPowerRejectsOversizedBody(t *testing.T) {
-	body := `{"a": 2, "b": 3}` + strings.Repeat(" ", 1024)
-
-	response := send(t, http.MethodPost, "/api/v1/power", body)
-
-	assertError(t, response, http.StatusRequestEntityTooLarge, "request_too_large")
 }
 
 func TestSqrtReturnsResult(t *testing.T) {
@@ -431,26 +377,6 @@ func TestPercentageOverflowReturnsResultOutOfRange(t *testing.T) {
 	response := send(t, http.MethodPost, "/api/v1/percentage", `{"a": 1e308, "b": 1000}`)
 
 	assertError(t, response, http.StatusUnprocessableEntity, "result_out_of_range")
-}
-
-func TestPercentageRejectsInvalidRequests(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-	}{
-		{name: "malformed JSON", body: `{"a": 20,`},
-		{name: "missing b", body: `{"a": 20}`},
-		{name: "string field", body: `{"a": "20", "b": 50}`},
-		{name: "unknown field", body: `{"a": 20, "b": 50, "c": 1}`},
-		{name: "number too large for float64", body: `{"a": 1e999, "b": 50}`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			response := send(t, http.MethodPost, "/api/v1/percentage", tt.body)
-			assertError(t, response, http.StatusBadRequest, "invalid_request")
-		})
-	}
 }
 
 func assertError(t *testing.T, response *httptest.ResponseRecorder, wantStatus int, wantCode string) {
