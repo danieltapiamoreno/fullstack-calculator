@@ -1,6 +1,6 @@
 const NUMBER_FORMAT = /^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
 
-export type ParsedOperand = { ok: true; value: number } | { ok: false; message: string }
+type ParsedOperand = { ok: true; value: number } | { ok: false; message: string }
 
 /** Parses what the user typed. Maths rules, such as dividing by zero, are left to the server. */
 export function parseOperand(input: string): ParsedOperand {

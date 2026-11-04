@@ -3,7 +3,7 @@ export type CalculationOutcome =
   | { kind: 'rejected'; code: string }
   | { kind: 'unavailable' }
 
-export type Operands = { a: number; b?: number }
+type Operands = { a: number; b?: number }
 
 /** Calls the API. It never throws: every failure is returned as an outcome. */
 export async function calculate(
